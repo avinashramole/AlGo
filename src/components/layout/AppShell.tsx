@@ -5,6 +5,7 @@ import { loadClientList } from "../../lib/clientsCache";
 import { PreviewDeskBanner } from "../../lib/deskHost";
 import { isAdminUser, isUserDesk, markUserDeskDocument } from "../../lib/roles";
 import { cn } from "../../lib/format";
+import { FingerprintLock } from "./FingerprintLock";
 import { Header } from "./Header";
 import { MobileNav } from "./MobileNav";
 import { Sidebar } from "./Sidebar";
@@ -23,6 +24,7 @@ export function AppShell() {
   }, [user]);
 
   return (
+    <FingerprintLock>
     <div
       className="h-[100dvh] max-w-[100vw] overflow-hidden bg-[var(--bg)]"
       data-mobile-app="responsive"
@@ -39,5 +41,6 @@ export function AppShell() {
       </div>
       <MobileNav />
     </div>
+    </FingerprintLock>
   );
 }

@@ -22,6 +22,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        registerPlugin(T2SFingerprintPlugin.class);
         super.onCreate(savedInstanceState);
         Bridge bridge = getBridge();
         if (bridge != null && bridge.getWebView() != null) {

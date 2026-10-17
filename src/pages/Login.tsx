@@ -51,7 +51,7 @@ function downloadAndroidApk() {
 }
 
 export function Login() {
-  const { login, requestOtp, verifyOtp, signup, resetPassword, startGoogleLogin } = useAuth();
+  const { login, requestOtp, verifyOtp, signup, resetPassword, startGoogleLogin, loginThumb, hasThumb } = useAuth();
   const navigate = useNavigate();
   const [page, setPage] = useState<"signin" | "signup" | "reset">("signin");
   const [name, setName] = useState("");
@@ -176,6 +176,19 @@ export function Login() {
     } catch (err) {
         setError(catchDeskError(err, "Could not send code"));
       return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onFingerprint = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await loginThumb();
+      navigate("/", { replace: true });
+    } catch (err) {
+      setError(catchDeskError(err, "Fingerprint login failed"));
     } finally {
       setLoading(false);
     }
@@ -524,6 +537,11 @@ export function Login() {
                     <GoogleIcon />
                     Login with Google
                   </button>
+                  {hasThumb && isNativeHybrid() ? (
+                    <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onFingerprint()} data-fingerprint-login="true">
+                      Unlock with fingerprint
+                    </button>
+                  ) : null}
                 </div>
               </>
             ) : null}
