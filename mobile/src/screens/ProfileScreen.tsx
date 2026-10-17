@@ -13,12 +13,14 @@ export function ProfileScreen() {
   const [mobile, setMobile] = useState(user?.mobile || "");
   const [brokerName, setBrokerName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
+    if (dirty) return;
     setName(user?.name || "");
     setEmail(user?.email || "");
     setMobile(user?.mobile || "");
-  }, [user]);
+  }, [user, dirty]);
 
   useEffect(() => {
     if (user?.role === "admin") return;
@@ -38,6 +40,7 @@ export function ProfileScreen() {
     setBusy(true);
     try {
       await updateProfile({ name, email, mobile });
+      setDirty(false);
       Alert.alert("Profile", "Profile saved.");
     } catch (error) {
       Alert.alert("Profile", error instanceof Error ? error.message : "Could not save");
@@ -54,10 +57,13 @@ export function ProfileScreen() {
         </View>
         <Text style={styles.name}>Profile</Text>
       </View>
+      <Text style={styles.identity}>
+        Name {name || "-"} | Email {email || "-"} | Mobile {mobile || "-"}
+      </Text>
       <Text style={styles.edit}>Edit profile</Text>
-      <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name" />
-      <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={setEmail} placeholder="Email" />
-      <TextInput style={styles.input} keyboardType="phone-pad" value={mobile} onChangeText={setMobile} placeholder="Mobile no" />
+      <TextInput style={styles.input} value={name} onChangeText={(value) => { setDirty(true); setName(value); }} placeholder="Name" />
+      <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={(value) => { setDirty(true); setEmail(value); }} placeholder="Email" />
+      <TextInput style={styles.input} keyboardType="phone-pad" value={mobile} onChangeText={(value) => { setDirty(true); setMobile(value); }} placeholder="Mobile no" />
       <Pressable style={styles.save} onPress={() => void onSave()} disabled={busy}>
         <Text style={styles.saveText}>{busy ? "Saving..." : "Save profile"}</Text>
       </Pressable>
@@ -89,6 +95,7 @@ const styles = StyleSheet.create({
   avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center", marginBottom: 8 },
   avatarText: { color: "#fff", fontWeight: "800", fontSize: 22 },
   name: { fontSize: 22, fontWeight: "800" },
+  identity: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
   row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   label: { color: colors.muted },
   value: { fontWeight: "700", maxWidth: "62%", textAlign: "right" },

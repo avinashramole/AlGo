@@ -406,6 +406,19 @@ function persist() {
   });
 }
 
+function withUsersMutation(mutator) {
+  return withUsersLock(() => {
+    const next = loadUsers();
+    if (!usersReadable) throw fail("Could not read accounts. Try again.", 503);
+    store = next;
+    const result = mutator();
+    if (result && result.skipPersist) return result.value;
+    saveUsers(store.users);
+    store = rebuildIndexes(store.users);
+    return result && Object.prototype.hasOwnProperty.call(result, "value") ? result.value : result;
+  });
+}
+
 function reloadUsers() {
   const next = loadUsers();
   if (!usersReadable) throw fail("Could not read accounts. Try again.", 503);
@@ -499,12 +512,13 @@ function looksLikeIp(value) {
 export function recordLoginIp(sessionToken, ip) {
   const clean = String(ip || "").trim().replace(/^::ffff:/, "");
   if (!looksLikeIp(clean)) return null;
-  reloadUsers();
-  const user = userFromToken(sessionToken);
-  if (!user) return null;
-  user.loginIp = clean;
-  persist();
-  return publicUser(user);
+  return withUsersMutation(() => {
+    const user = userFromToken(sessionToken);
+    if (!user) return { skipPersist: true, value: null };
+    if (user.loginIp === clean) return { skipPersist: true, value: publicUser(user) };
+    user.loginIp = clean;
+    return publicUser(user);
+  });
 }
 
 function issueSession(user) {
@@ -975,43 +989,43 @@ export function sessionUser(token, { reload = false } = {}) {
 }
 
 export function setLoginPassword(sessionToken, { password, confirm } = {}) {
-  reloadUsers();
-  const user = userFromToken(sessionToken);
-  if (!user) throw fail("Sign in first.", 401);
-  const next = String(password || "").trim();
-  const again = String(confirm ?? password ?? "").trim();
-  if (next.length < 6) throw fail("Password must be at least 6 characters.");
-  if (next !== again) throw fail("Passwords do not match.");
-  user.password = hashPassword(next);
-  persist();
-  return { ok: true, user: publicUser(user) };
+  return withUsersMutation(() => {
+    const user = userFromToken(sessionToken);
+    if (!user) throw fail("Sign in first.", 401);
+    const next = String(password || "").trim();
+    const again = String(confirm ?? password ?? "").trim();
+    if (next.length < 6) throw fail("Password must be at least 6 characters.");
+    if (next !== again) throw fail("Passwords do not match.");
+    user.password = hashPassword(next);
+    return { ok: true, user: publicUser(user) };
+  });
 }
 
 export function updateProfile(sessionToken, { name, email, mobile } = {}) {
-  reloadUsers();
-  const user = userFromToken(sessionToken);
-  if (!user) throw fail("Sign in first.", 401);
-  const nextName = String(name ?? user.name ?? "").trim();
-  if (nextName.length < 2) throw fail("Enter your name.");
-  const nextEmail = normalizeEmail(email ?? user.email);
-  const nextMobile = normalizeMobile(mobile ?? user.mobile);
-  if (nextEmail && !isGmail(nextEmail) && !nextEmail.endsWith("@t2s.app")) {
-    throw fail("Use a Gmail address, or leave email blank.");
-  }
-  if (nextMobile && !isMobile(nextMobile)) throw fail("Enter a 10-digit Indian mobile number, or leave it blank.");
-  if (nextEmail) {
-    const taken = store.byEmail.get(nextEmail);
-    if (taken && taken.id !== user.id) throw fail("That Gmail is already on another account.");
-  }
-  if (nextMobile) {
-    const taken = store.byMobile.get(nextMobile);
-    if (taken && taken.id !== user.id) throw fail("That mobile is already on another account.");
-  }
-  user.name = nextName;
-  user.email = nextEmail;
-  user.mobile = nextMobile;
-  persist();
-  return { ok: true, user: publicUser(user) };
+  return withUsersMutation(() => {
+    const user = userFromToken(sessionToken);
+    if (!user) throw fail("Sign in first.", 401);
+    const nextName = String(name ?? user.name ?? "").trim();
+    if (nextName.length < 2) throw fail("Enter your name.");
+    const nextEmail = normalizeEmail(email ?? user.email);
+    const nextMobile = normalizeMobile(mobile ?? user.mobile);
+    if (nextEmail && !isGmail(nextEmail) && !nextEmail.endsWith("@t2s.app")) {
+      throw fail("Use a Gmail address, or leave email blank.");
+    }
+    if (nextMobile && !isMobile(nextMobile)) throw fail("Enter a 10-digit Indian mobile number, or leave it blank.");
+    if (nextEmail) {
+      const taken = store.byEmail.get(nextEmail);
+      if (taken && taken.id !== user.id) throw fail("That Gmail is already on another account.");
+    }
+    if (nextMobile) {
+      const taken = store.byMobile.get(nextMobile);
+      if (taken && taken.id !== user.id) throw fail("That mobile is already on another account.");
+    }
+    user.name = nextName;
+    user.email = nextEmail;
+    user.mobile = nextMobile;
+    return { ok: true, user: publicUser(user) };
+  });
 }
 
 export function listPublicUsers() {
@@ -1035,25 +1049,36 @@ export function getPublicUser(id) {
 }
 
 export function adminUpdateUser(id, patch = {}) {
-  reloadUsers();
-  const user = store.byId.get(String(id || "").trim());
-  if (!user) throw fail("User not found.", 404);
-  if (patch.name != null) {
-    const name = String(patch.name || "").trim();
-    if (name.length < 2) throw fail("Enter the name.");
-    user.name = name;
-  }
-  if (patch.mobile != null) {
-    const mobile = normalizeMobile(patch.mobile);
-    if (mobile && !isMobile(mobile)) throw fail("Enter a 10-digit Indian mobile, or leave it blank.");
-    if (mobile) {
-      const taken = store.byMobile.get(mobile);
-      if (taken && taken.id !== user.id) throw fail("That mobile is already on another account.");
+  return withUsersMutation(() => {
+    const user = store.byId.get(String(id || "").trim());
+    if (!user) throw fail("User not found.", 404);
+    if (patch.name != null) {
+      const name = String(patch.name || "").trim();
+      if (name.length < 2) throw fail("Enter the name.");
+      user.name = name;
     }
-    user.mobile = mobile;
-  }
-  persist();
-  return publicUser(user);
+    if (patch.email != null) {
+      const email = normalizeEmail(patch.email);
+      if (email && !isGmail(email) && !email.endsWith("@t2s.app")) {
+        throw fail("Use a Gmail address, or leave email blank.");
+      }
+      if (email) {
+        const taken = store.byEmail.get(email);
+        if (taken && taken.id !== user.id) throw fail("That Gmail is already on another account.");
+      }
+      user.email = email;
+    }
+    if (patch.mobile != null) {
+      const mobile = normalizeMobile(patch.mobile);
+      if (mobile && !isMobile(mobile)) throw fail("Enter a 10-digit Indian mobile, or leave it blank.");
+      if (mobile) {
+        const taken = store.byMobile.get(mobile);
+        if (taken && taken.id !== user.id) throw fail("That mobile is already on another account.");
+      }
+      user.mobile = mobile;
+    }
+    return publicUser(user);
+  });
 }
 
 export function deleteRegisteredUser(id, { actorId } = {}) {

@@ -637,6 +637,36 @@ test("member stored as Shantai Infotech can sign in with Gmail and 123456", () =
   assert.throws(() => loginWithPassword("shantai.infotech@gmail.com", "wrong-pass"), /Wrong email or password/);
 });
 
+test("member profile save keeps name, email, and mobile after a later login-IP write", () => {
+  const stamp = String(Date.now()).slice(-9);
+  const email = `shantai.save.${stamp}@gmail.com`;
+  const member = completeSignup({
+    name: "Shantai Infotech",
+    email,
+    mobile: "9876506677",
+    password: "create123",
+  });
+  const saved = updateProfile(member.token, {
+    name: "Shantai Infotech",
+    email,
+    mobile: "9876508899",
+  });
+  assert.equal(saved.user.name, "Shantai Infotech");
+  assert.equal(saved.user.email, email);
+  assert.equal(saved.user.mobile, "9876508899");
+  recordLoginIp(member.token, "203.0.113.44");
+  recordLoginIp(member.token, "203.0.113.44");
+  const onDisk = JSON.parse(fs.readFileSync(usersFile, "utf8")).find((row) => row.email === email);
+  assert.equal(onDisk.name, "Shantai Infotech");
+  assert.equal(onDisk.email, email);
+  assert.equal(onDisk.mobile, "9876508899");
+  assert.equal(onDisk.loginIp, "203.0.113.44");
+  const reloaded = sessionUser(member.token, { reload: true });
+  assert.equal(reloaded.name, "Shantai Infotech");
+  assert.equal(reloaded.email, email);
+  assert.equal(reloaded.mobile, "9876508899");
+});
+
 test("member can set a Settings password and still sign in with Google or that password", () => {
   const email = `settings.pass.${Date.now()}@gmail.com`;
   const client = adminCreateMember({

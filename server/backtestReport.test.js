@@ -8,12 +8,21 @@ import { fileURLToPath } from "node:url";
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-bt-"));
 process.env.T2S_BACKTEST_REPORT_DIR = dir;
 
-const { T2S_STANDARD_BRAND_REPORT, brandedReportFile, buildBacktestReport, clearBacktestReport, deskToProposalReport, loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName, saveBacktestReport } = await import("./backtestReport.js");
+const { T2S_STANDARD_BRAND_REPORT, brandedReportFile, buildBacktestReport, clearBacktestReport, deskToProposalReport, loadBacktestReport, PDF_MEMBER_IDENTITY_FONT, renderBacktestExcel, renderBacktestPdf, reportDownloadName, saveBacktestReport } = await import("./backtestReport.js");
 const { loadFullBrandLogo, PDF_MEMBER_WATERMARK_COVER, PDF_WATERMARK_COVER } = await import("./pdfBrandLogo.js");
 
 function watermarkBox(pdf) {
   const match = pdf.match(/([0-9.]+) 0 0 ([0-9.]+) [0-9.]+ [0-9.]+ cm\n\/Im1 Do/);
   return { w: Number(match?.[1] || 0), h: Number(match?.[2] || 0) };
+}
+
+function pdfTextY(pdf, label) {
+  const needle = `(${label}) Tj`;
+  const at = pdf.indexOf(needle);
+  if (at < 0) return -1;
+  const td = pdf.lastIndexOf(" Td", at);
+  const line = pdf.slice(pdf.lastIndexOf("\n", td) + 1, td);
+  return Number(line.split(" ")[1]);
 }
 
 test("full T2S logo is decoded for the PDF watermark", () => {
@@ -333,6 +342,15 @@ test("member desk download keeps P&L cards, drops Drawdown, and prints identity"
   assert.match(pdf, /Name Avinash Ramole/);
   assert.match(pdf, /Email avinash@t2s\.app/);
   assert.match(pdf, /Mobile 9876543210/);
+  assert.equal(PDF_MEMBER_IDENTITY_FONT, 12);
+  assert.match(
+    pdf,
+    /\/F2 12 Tf[\s\S]{0,160}\(Name Avinash Ramole \| Email avinash@t2s\.app \| Mobile 9876543210\) Tj/,
+  );
+  const identityY = pdfTextY(pdf, "Name Avinash Ramole | Email avinash@t2s.app | Mobile 9876543210");
+  const brandY = pdfTextY(pdf, "TRADE");
+  assert.ok(identityY > brandY);
+  assert.ok(identityY >= 575);
   assert.match(pdf, /Win rate/);
   assert.match(pdf, /TRADES/);
   assert.match(pdf, /NIFTY 24800 CE/);

@@ -81,6 +81,9 @@ function memberProfile(report) {
   };
 }
 
+const PDF_LINE_FONT = 8;
+export const PDF_MEMBER_IDENTITY_FONT = PDF_LINE_FONT + 4;
+
 function memberProfileLine(report) {
   const { name, email, mobile } = memberProfile(report);
   return `Name ${name || "-"} | Email ${email || "-"} | Mobile ${mobile || "-"}`;
@@ -560,8 +563,9 @@ function excelFillRow(row, zebra) {
   }));
 }
 
-function excelBookRows(rows, title = "Backtest report") {
+function excelBookRows(rows, title = "Backtest report", identity = "") {
   return [
+    ...(identity ? [[{ v: identity, s: XLSX_STYLE.brand }]] : []),
     [{ v: "TRADE 2 SMART", s: XLSX_STYLE.brand }, { v: title, s: XLSX_STYLE.brandSub }],
     [{ v: "trade2smart.com", s: XLSX_STYLE.brandSub }, { v: "Confidential desk report A4 landscape", s: XLSX_STYLE.brandSub }],
     [],
@@ -581,10 +585,10 @@ function excelSummaryPairs(report) {
   if (isMemberReport(report)) {
     const member = memberProfile(report);
     return [
-      ...base,
       ["Name", member.name || "-"],
       ["Email", member.email || "-"],
       ["Mobile", member.mobile || "-"],
+      ...base,
       ["Start date", report.summary.from],
       ["End date", report.summary.to],
       ["P&L", Number(report.summary.pnl) || 0],
@@ -658,7 +662,9 @@ function excelSummaryPairs(report) {
 export function renderBacktestExcel(report) {
   const pairs = excelSummaryPairs(report);
   const title = reportKindLabel(report);
+  const identity = isMemberReport(report) ? [[{ v: memberProfileLine(report), s: XLSX_STYLE.brand }]] : [];
   const summaryRows = [
+    ...identity,
     [{ v: "TRADE 2 SMART", s: XLSX_STYLE.brand }, { v: title, s: XLSX_STYLE.brandSub }],
     [{ v: "trade2smart.com", s: XLSX_STYLE.brandSub }, { v: "Confidential desk report A4 landscape", s: XLSX_STYLE.brandSub }],
     [],
@@ -668,9 +674,10 @@ export function renderBacktestExcel(report) {
   const fills = report.legs?.length ? report.legs : report.trades || [];
   const tableWidths = [6, 12, 8, 8, 10, 18, 16, 16, 12, 12, 8, 12, 14, 10, 12, 8];
   if (isMemberReport(report)) {
+    const line = memberProfileLine(report);
     return buildXlsx([
-      { name: "Summary", rows: summaryRows, widths: [36, 72], freeze: 4 },
-      { name: "Trades", rows: excelBookRows(report.trades || [], title), widths: tableWidths, freeze: 4 },
+      { name: "Summary", rows: summaryRows, widths: [36, 72], freeze: 5 },
+      { name: "Trades", rows: excelBookRows(report.trades || [], title, line), widths: tableWidths, freeze: 5 },
     ]);
   }
   return buildXlsx([
@@ -744,7 +751,7 @@ function pdfTheme(report) {
       paper: PDF_WHITE,
       ink: PDF_MEMBER_INK,
       muted: PDF_MEMBER_MUTED,
-      headerH: 52,
+      headerH: 70,
     };
   }
   return {
@@ -847,10 +854,16 @@ function makePdfDoc(report) {
     if (theme.pageBg) rect(0, 0, PAGE_W, PAGE_H, theme.pageBg);
     rect(0, PAGE_H - theme.headerH, PAGE_W, theme.headerH, theme.headerBg);
     rect(0, PAGE_H - theme.headerH - 4, PAGE_W, 4, theme.accent);
-    brandTitle(PAGE_MARGIN, PAGE_H - 20, 13);
+    const member = isMemberReport(report);
+    const identityY = PAGE_H - 16;
+    const brandY = member ? PAGE_H - 36 : PAGE_H - 20;
+    if (member) {
+      text(PAGE_MARGIN, identityY, memberProfileLine(report), PDF_MEMBER_IDENTITY_FONT, "F2", theme.headerInk);
+    }
+    brandTitle(PAGE_MARGIN, brandY, 13);
     const kind = reportKindLabel(report);
     const right = continued ? `${kind} (continued)` : kind;
-    text(PAGE_W - PAGE_MARGIN - pdfTextWidth(right, 11, "F2"), PAGE_H - 20, right, 11, "F2", theme.kind);
+    text(PAGE_W - PAGE_MARGIN - pdfTextWidth(right, 11, "F2"), brandY, right, 11, "F2", theme.kind);
     const subtitle = `${report.strategy.name}  -  ${report.summary.holdStyle || report.strategy.kind || "desk"}  -  Currency Indian Rupee (Rs.)`;
     text(PAGE_MARGIN, PAGE_H - theme.headerH + 12, subtitle, 8, "F1", theme.headerMuted);
     y = PAGE_H - theme.headerH - 16;
@@ -864,7 +877,7 @@ function makePdfDoc(report) {
     }
   }
 
-  function line(value, size = 8) {
+  function line(value, size = PDF_LINE_FONT) {
     ensure(12);
     text(PAGE_MARGIN, y - 9, value, size);
     y -= 12;
@@ -963,7 +976,6 @@ function makePdfDoc(report) {
       : report.summary.range || `${report.summary.from} to ${report.summary.to}`;
   line(`Range ${range} Generated ${report.generatedAt || ""}`);
   if (member) {
-    line(memberProfileLine(report));
     metricGrid(
       [
         { label: "P&L", value: pdfInr(report.summary.pnl), money: true, raw: report.summary.pnl },

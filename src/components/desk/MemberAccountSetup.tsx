@@ -52,13 +52,15 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [tokenWait, setTokenWait] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const tokenWaitGen = useRef(0);
 
   useEffect(() => {
+    if (dirty) return;
     setName(user?.name || "");
     setEmail(user?.email || "");
     setMobile(user?.mobile || "");
-  }, [user]);
+  }, [user, dirty]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -98,6 +100,7 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
     setNote("");
     try {
       await updateProfile({ name, email, mobile });
+      setDirty(false);
       setNote("Profile saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save profile");
@@ -231,11 +234,11 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
           <div className="text-sm font-bold sm:col-span-3">Profile</div>
           <label className="block text-sm font-semibold">
             Name
-            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal" value={name} onChange={(event) => setName(event.target.value)} />
+            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal" value={name} onChange={(event) => { setDirty(true); setName(event.target.value); }} />
           </label>
           <label className="block text-sm font-semibold">
             Gmail
-            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" />
+            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal" value={email} onChange={(event) => { setDirty(true); setEmail(event.target.value); }} placeholder="you@gmail.com" />
           </label>
           <label className="block text-sm font-semibold">
             Mobile
@@ -245,7 +248,10 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
               inputMode="numeric"
               maxLength={10}
               placeholder="98xxxxxxxx"
-              onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+              onChange={(event) => {
+                setDirty(true);
+                setMobile(event.target.value.replace(/\D/g, "").slice(0, 10));
+              }}
             />
           </label>
           <button type="submit" disabled={busy === "profile"} className="h-10 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60 sm:col-span-3">

@@ -154,6 +154,9 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.doesNotMatch(memberSettings, /Broker, IP/);
   assert.doesNotMatch(profile, /MemberAccountSetup/);
   assert.match(profile, /data-member-profile="identity"/);
+  assert.match(profile, /Name \{name \|\| "-"\} \| Email \{email \|\| "-"\} \| Mobile \{mobile \|\| "-"\}/);
+  assert.match(profile, /text-lg font-bold/);
+  assert.match(profile, /setDirty\(true\)/);
   assert.match(profile, /data-member-profile="broker"/);
   assert.match(profile, /Broker name/);
   assert.match(profile, /Edit profile/);

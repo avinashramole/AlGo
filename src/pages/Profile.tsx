@@ -18,7 +18,7 @@ import { useTheme } from "../context/ThemeContext";
 import { isAdminUser } from "../lib/roles";
 
 export function Profile() {
-  const { user, updateProfile, refreshMe, requestLogout } = useAuth();
+  const { user, updateProfile, requestLogout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const admin = isAdminUser(user);
   const [name, setName] = useState(user?.name || "");
@@ -27,16 +27,14 @@ export function Profile() {
   const [brokerName, setBrokerName] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    void refreshMe().catch(() => undefined);
-  }, [refreshMe]);
-
-  useEffect(() => {
+    if (dirty) return;
     setName(user?.name || "");
     setEmail(user?.email || "");
     setMobile(user?.mobile || "");
-  }, [user]);
+  }, [user, dirty]);
 
   useEffect(() => {
     if (admin) return;
@@ -59,6 +57,7 @@ export function Profile() {
     setNote("");
     try {
       await updateProfile({ name, email, mobile });
+      setDirty(false);
       setNote("Profile saved.");
     } catch (err) {
       setNote(err instanceof Error ? err.message : "Could not save profile");
@@ -80,15 +79,18 @@ export function Profile() {
       </PhoneCard>
 
       <section className="card p-4" data-member-profile="identity">
+        <div className="mb-3 text-lg font-bold leading-snug">
+          Name {name || "-"} | Email {email || "-"} | Mobile {mobile || "-"}
+        </div>
         <div className="mb-2 text-sm font-bold">Edit profile</div>
         <form onSubmit={onSave} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="block text-sm font-semibold">
             Name
-            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal" value={name} onChange={(event) => setName(event.target.value)} />
+            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal" value={name} onChange={(event) => { setDirty(true); setName(event.target.value); }} />
           </label>
           <label className="block text-sm font-semibold">
             Email
-            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" />
+            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal" value={email} onChange={(event) => { setDirty(true); setEmail(event.target.value); }} placeholder="you@gmail.com" />
           </label>
           <label className="block text-sm font-semibold">
             Mobile no
@@ -97,7 +99,10 @@ export function Profile() {
               value={mobile}
               inputMode="numeric"
               maxLength={10}
-              onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+              onChange={(event) => {
+                setDirty(true);
+                setMobile(event.target.value.replace(/\D/g, "").slice(0, 10));
+              }}
               placeholder="98xxxxxxxx"
             />
           </label>

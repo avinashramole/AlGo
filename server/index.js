@@ -364,7 +364,7 @@ app.delete("/api/subscriptions/:id", (req, res) => {
 });
 
 function memberAuth(req) {
-  const user = sessionUser(readToken(req));
+  const user = sessionUser(readToken(req), { reload: true });
   if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
   return user;
 }

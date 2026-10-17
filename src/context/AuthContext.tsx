@@ -503,17 +503,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       updateProfile: async (payload: { name: string; email?: string; mobile?: string }) => {
         const token = readToken();
-        try {
-          const result = await updateProfileApi(token, payload);
-          persistUser(result.user);
-          setUser(result.user);
-        } catch (error) {
-          if (!signedOut(error) || !token) throw error;
-          clearStoredSession();
-          const result = await updateProfileApi("", payload);
-          persistUser(result.user);
-          setUser(result.user);
-        }
+        const result = await updateProfileApi(token, payload);
+        persistUser(result.user);
+        setUser(result.user);
       },
       changePassword: async (payload: { password: string; confirm: string }) => {
         const token = readToken();
