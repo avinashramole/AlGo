@@ -978,6 +978,19 @@ function makePdfDoc(report) {
   return pages;
 }
 
+function pdfWatermarkAlpha(report) {
+  return isMemberReport(report) ? 0.18 : 0.1;
+}
+
+function pageOpsWithWatermark(pageOps, logo) {
+  const watermark = pdfWatermarkOps(PAGE_W, PAGE_H, logo);
+  const pageFill = `0.00 0.00 ${PAGE_W.toFixed(2)} ${PAGE_H.toFixed(2)} re`;
+  if (pageOps[1] === pageFill && pageOps[2] === "f") {
+    return [...pageOps.slice(0, 3), ...watermark, ...pageOps.slice(3)];
+  }
+  return [...watermark, ...pageOps];
+}
+
 export function renderBacktestPdf(report) {
   const pages = makePdfDoc(report);
   let logo = null;
@@ -1003,8 +1016,9 @@ export function renderBacktestPdf(report) {
       ]),
     );
   }
+  const alpha = pdfWatermarkAlpha(report).toFixed(2);
   const resources = image
-    ? `/Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> /XObject << /Im1 3 0 R >> /ExtGState << /GS1 << /ca 0.10 /CA 0.10 >> >> >>`
+    ? `/Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> /XObject << /Im1 3 0 R >> /ExtGState << /GS1 << /ca ${alpha} /CA ${alpha} >> >> >>`
     : `/Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >>`;
   for (let i = 0; i < pages.length; i += 1) {
     const contentId = firstPage + i * 2 + 1;
@@ -1013,7 +1027,7 @@ export function renderBacktestPdf(report) {
         `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Rotate 0 /Contents ${contentId} 0 R ${resources} >>`,
       ),
     );
-    const ops = image ? [...pdfWatermarkOps(PAGE_W, PAGE_H, logo), ...pages[i]] : pages[i];
+    const ops = image ? pageOpsWithWatermark(pages[i], logo) : pages[i];
     const stream = Buffer.from(ops.join("\n"));
     objects.push(
       Buffer.concat([

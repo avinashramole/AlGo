@@ -333,7 +333,14 @@ test("member desk download keeps P&L cards, drops Drawdown, and prints identity"
   assert.match(pdf, /\(SMART\)/);
   assert.match(pdf, /0\.918 0\.945 0\.969/);
   assert.match(pdf, /0\.122 0\.290 0\.451/);
+  assert.match(pdf, /\/Im1 Do/);
+  assert.match(pdf, /\/Subtype \/Image/);
+  assert.match(pdf, /\/ca 0\.18/);
   assert.equal(pdf.includes("0.000 0.059 0.161"), false);
+  const pageFillAt = pdf.indexOf("0.00 0.00 842.00 595.00 re");
+  const watermarkAt = pdf.indexOf("/Im1 Do");
+  assert.equal(pageFillAt >= 0, true);
+  assert.equal(watermarkAt > pageFillAt, true);
   const brandX = ["TRADE", "2", "SMART"].map((label) => {
     const needle = `(${label}) Tj`;
     const at = pdf.indexOf(needle);
