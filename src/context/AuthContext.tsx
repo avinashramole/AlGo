@@ -490,11 +490,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (result.user) {
           persistUser(result.user);
           setUser(result.user);
+          if (isCapacitorNative()) {
+            const { fingerprintAvailable, setFingerprintLockOn, verifyFingerprint } = await import("../lib/fingerprintLock");
+            if (await fingerprintAvailable()) {
+              await verifyFingerprint("Enable fingerprint lock");
+              setFingerprintLockOn(true);
+              return;
+            }
+          }
           await registerDeviceThumb(result.user);
         }
       },
       loginThumb: async () => {
-        await verifyDeviceThumb();
+        if (isCapacitorNative()) {
+          const { verifyFingerprint } = await import("../lib/fingerprintLock");
+          await verifyFingerprint("Sign in to Trade2Smart");
+        } else {
+          await verifyDeviceThumb();
+        }
         const thumbToken = localStorage.getItem("t2s-thumb-token") || "";
         const result = await loginThumbApi(thumbToken);
         persist(result.user, result.token, true);

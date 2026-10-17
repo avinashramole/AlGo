@@ -172,6 +172,7 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(memberSettings, /MemberAccountSetup/);
   assert.match(memberSettings, /showProfile=\{false\}/);
   assert.match(memberSettings, /data-member-settings="menu"/);
+  assert.match(memberSettings, /FingerprintLockRow/);
   assert.doesNotMatch(memberSettings, /data-login-password/);
   assert.doesNotMatch(memberSettings, /Save password/);
   assert.doesNotMatch(memberSettings, /123456/);

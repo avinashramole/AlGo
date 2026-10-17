@@ -42,7 +42,7 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.doesNotMatch(context, /@vite-ignore/);
   assert.match(login, /if \(isNativeHybrid\(\)\) setLoading\(false\)/);
   const gradle = fs.readFileSync(path.join(root, "android/app/build.gradle"), "utf8");
-  assert.match(gradle, /versionName "1.9"/);
+  assert.match(gradle, /versionName "1.10"/);
   const mainActivity = fs.readFileSync(path.join(root, "android/app/src/main/java/com/t2s/algo/MainActivity.java"), "utf8");
   assert.match(mainActivity, /onNewIntent/);
   assert.match(auth, /isEmbeddedWebView/);
@@ -99,8 +99,8 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(infoPlist, /LSSupportsOpeningDocumentsInPlace/);
   const pbx = fs.readFileSync(path.join(root, "ios/App/App.xcodeproj/project.pbxproj"), "utf8");
   assert.match(pbx, /PRODUCT_BUNDLE_IDENTIFIER = com\.t2s\.algo/);
-  assert.match(pbx, /MARKETING_VERSION = 1.9/);
-  assert.match(pbx, /CURRENT_PROJECT_VERSION = 10/);
+  assert.match(pbx, /MARKETING_VERSION = 1.10/);
+  assert.match(pbx, /CURRENT_PROJECT_VERSION = 11/);
   assert.equal(fs.existsSync(path.join(root, "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png")), true);
   const appDelegate = fs.readFileSync(path.join(root, "ios/App/App/AppDelegate.swift"), "utf8");
   assert.match(appDelegate, /ApplicationDelegateProxy/);
@@ -118,6 +118,7 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(loginCss, /#fff8f1/);
   assert.match(styles, /Theme.AppCompat.Light.NoActionBar/);
   assert.match(styles, /navigationBarColor/);
+  assert.match(css, /\.t2s-fp-lock/);
   assert.match(css, /\.t2s-desk-toast/);
   assert.match(css, /\.t2s-report-save-scrim/);
   const saveChoice = fs.readFileSync(path.join(root, "src/lib/reportSaveChoice.ts"), "utf8");
@@ -145,7 +146,20 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(activity, /onJsAlert/);
   assert.match(activity, /Toast\.makeText/);
   assert.match(activity, /onJsConfirm/);
+  assert.match(activity, /registerPlugin\(T2SFingerprintPlugin\.class\)/);
   assert.equal(activity.includes("trade2smart.com"), false);
+  const fingerprint = fs.readFileSync(path.join(root, "android/app/src/main/java/com/t2s/algo/T2SFingerprintPlugin.java"), "utf8");
+  assert.match(fingerprint, /@CapacitorPlugin\(name = "T2SFingerprint"\)/);
+  assert.match(fingerprint, /BiometricPrompt/);
+  assert.match(manifest, /USE_BIOMETRIC/);
+  assert.match(gradle, /androidx.biometric:biometric/);
+  const iosFp = fs.readFileSync(path.join(root, "ios/App/App/T2SFingerprintPlugin.swift"), "utf8");
+  assert.match(iosFp, /jsName = "T2SFingerprint"/);
+  assert.match(iosFp, /deviceOwnerAuthenticationWithBiometrics/);
+  const fpLock = fs.readFileSync(path.join(root, "src/components/layout/FingerprintLock.tsx"), "utf8");
+  assert.match(fpLock, /data-fingerprint-lock="true"/);
+  assert.match(fpLock, /verifyFingerprint/);
+  assert.match(shell, /FingerprintLock/);
   assert.match(styles, /postSplashScreenTheme/);
   assert.match(styles, /TinyConfirmDialog/);
 });

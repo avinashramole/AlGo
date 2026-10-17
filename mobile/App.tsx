@@ -5,6 +5,7 @@ import { Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./src/AuthContext";
+import { FingerprintLock } from "./src/FingerprintLock";
 import { BrandMark } from "./src/components/BrandMark";
 import { DeskWebScreen } from "./src/screens/DeskWebScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
@@ -28,9 +29,14 @@ function Root() {
       {user ? (
         <Stack.Screen
           name="Desk"
-          component={DeskWebScreen}
           options={{ headerShown: false, title: user.role === "admin" ? "Admin Algo" : "Member desk" }}
-        />
+        >
+          {() => (
+            <FingerprintLock>
+              <DeskWebScreen />
+            </FingerprintLock>
+          )}
+        </Stack.Screen>
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
       )}

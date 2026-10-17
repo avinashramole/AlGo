@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { connectGmail, getGmailStatus } from "../api/client";
+import { FingerprintLockRow } from "../components/desk/FingerprintLockRow";
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 import { hasDhanQuotes } from "../lib/format";
@@ -54,6 +55,7 @@ export function Settings() {
   return (
     <div className="desk-page mx-auto max-w-2xl space-y-2">
       <h1 className="text-xl font-bold">Settings</h1>
+      <FingerprintLockRow />
       <section className="card divide-y divide-[var(--border)]">
         {rows.map(([label, value]) => (
           <div key={label} className="flex items-center justify-between gap-3 px-4 py-3">
