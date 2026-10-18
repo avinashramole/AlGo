@@ -21,7 +21,7 @@ export function ReportsHub() {
   const tab = tabFromParams(params.get("tab"), showPaper);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-reports-tabs="position-order-reports">
       <ReportsBookTabs active={tab} />
       {tab === "orders" ? (
         <Orders embedded book="live" />

@@ -160,8 +160,10 @@ if ! grep -q 'overlayLiveUnrealized' "$HOME_DIR/server/memberBrokerPnl.js" || ! 
   echo "FAIL: Live Unrealized/Net P&L still waits on the slow broker book. Deploy cursor/fast-live-pnl-6826."
   exit 1
 fi
-if ! grep -q 'ReportsBookTabs' "$HOME_DIR/src/pages/ReportsHub.tsx" || ! grep -q 'data-reports-tabs="position-order-reports"' "$HOME_DIR/src/components/desk/ReportsBookTabs.tsx"; then
-  echo "FAIL: Reports tabs are not Position, Orders, Reports."
+if ! grep -q 'data-reports-tabs="position-order-reports"' "$HOME_DIR/src/pages/ReportsHub.tsx" \
+  || ! grep -q 'data-reports-tabs="position-order-reports"' "$HOME_DIR/src/components/desk/ReportsBookTabs.tsx" \
+  || ! grep -q 'to: "/master-report", label: "Master report"' "$HOME_DIR/src/components/layout/Sidebar.tsx"; then
+  echo "FAIL: Reports tabs are not Position, Orders, Reports, Master report."
   exit 1
 fi
 if ! grep -q 'data-mir-strategy' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'multi-index-reversal' "$HOME_DIR/server/multiIndexReversal/config.js"; then
@@ -254,6 +256,10 @@ if ! grep -Rql "$RESULT_MARKER" "$HOME_DIR/dist/assets"; then
 fi
 if ! grep -Rql 'first-candle-timeframe-bar' "$HOME_DIR/dist/assets"; then
   echo "FAIL: dist/ is missing Nifty/Crude timeframe chips. Build is still old."
+  exit 1
+fi
+if ! grep -Rql 'Master report' "$HOME_DIR/dist/assets"; then
+  echo "FAIL: dist/ is missing Master report. Website would publish without the admin menu."
   exit 1
 fi
 if [ -d "$HOME_DIR/.git" ]; then
