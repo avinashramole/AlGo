@@ -104,6 +104,10 @@ function isMasterReport(report) {
   return String(report?.audience || "").toLowerCase() === "master";
 }
 
+function usesMemberPdfTheme(report) {
+  return isMemberReport(report) || isMasterReport(report);
+}
+
 function reportKindLabel(report) {
   if (isMasterReport(report)) return "Master report";
   if (isMemberReport(report)) return "Trade report";
@@ -779,7 +783,7 @@ const HELVETICA_BOLD_WIDTHS = {
 };
 
 function pdfTheme(report) {
-  if (isMemberReport(report)) {
+  if (usesMemberPdfTheme(report)) {
     return {
       pageBg: PDF_MEMBER_PAGE,
       headerBg: PDF_MEMBER_HEADER,
@@ -1108,11 +1112,11 @@ function makePdfDoc(report) {
 }
 
 function pdfWatermarkAlpha(report) {
-  return isMemberReport(report) ? 0.18 : 0.1;
+  return usesMemberPdfTheme(report) ? 0.18 : 0.1;
 }
 
 function pdfWatermarkCover(report) {
-  return isMemberReport(report) ? PDF_MEMBER_WATERMARK_COVER : PDF_WATERMARK_COVER;
+  return usesMemberPdfTheme(report) ? PDF_MEMBER_WATERMARK_COVER : PDF_WATERMARK_COVER;
 }
 
 function pageOpsWithWatermark(pageOps, logo, report) {

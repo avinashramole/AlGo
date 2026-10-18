@@ -89,6 +89,14 @@ test("master PDF puts admin and user identity in one file", () => {
   assert.match(pdf, /Admin - /);
   assert.match(pdf, /User - Tape Tester/);
   assert.match(pdf, /Tape Tester trades/);
+  assert.match(pdf, /0\.918 0\.945 0\.969/);
+  assert.match(pdf, /0\.122 0\.290 0\.451/);
+  assert.match(pdf, /0\.886 0\.929 0\.961/);
+  assert.match(pdf, /\/ca 0\.18/);
+  assert.equal(pdf.includes("0.000 0.059 0.161"), false);
+  const reportSrc = fs.readFileSync(path.join(root, "server/backtestReport.js"), "utf8");
+  assert.match(reportSrc, /function usesMemberPdfTheme\(report\)/);
+  assert.match(reportSrc, /isMemberReport\(report\) \|\| isMasterReport\(report\)/);
   const file = brandedReportFile(report, "pdf", { name: "Desk Admin" });
   assert.equal(file.name, "Trade2Smart-Master-report.pdf");
   assert.equal(file.body.length > 800, true);
