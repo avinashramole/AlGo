@@ -21,6 +21,9 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(hub, /ReportsBookTabs/);
   assert.match(tabBar, /Position & Orders/);
   assert.match(tabBar, /data-reports-tabs="position-order-reports"/);
+  const deploy = fs.readFileSync(path.join(root, "deploy/update-website.sh"), "utf8");
+  assert.match(deploy, /src\/components\/desk\/ReportsBookTabs\.tsx/);
+  assert.doesNotMatch(deploy, /data-reports-tabs="position-order-reports"' "\$HOME_DIR\/src\/pages\/ReportsHub\.tsx"/);
   assert.match(tabsFile, /if \(value === "orders"\) return "orders";/);
   assert.match(tabsFile, /if \(value === "reports"\) return "reports";/);
   assert.match(tabsFile, /if \(value === "master"\) return "master";/);

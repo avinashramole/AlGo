@@ -160,8 +160,8 @@ if ! grep -q 'overlayLiveUnrealized' "$HOME_DIR/server/memberBrokerPnl.js" || ! 
   echo "FAIL: Live Unrealized/Net P&L still waits on the slow broker book. Deploy cursor/fast-live-pnl-6826."
   exit 1
 fi
-if ! grep -q 'data-reports-tabs="position-order-reports"' "$HOME_DIR/src/pages/ReportsHub.tsx"; then
-  echo "FAIL: Reports tabs are not Position, Orders, Reports. Deploy cursor/fast-live-pnl-6826."
+if ! grep -q 'ReportsBookTabs' "$HOME_DIR/src/pages/ReportsHub.tsx" || ! grep -q 'data-reports-tabs="position-order-reports"' "$HOME_DIR/src/components/desk/ReportsBookTabs.tsx"; then
+  echo "FAIL: Reports tabs are not Position, Orders, Reports."
   exit 1
 fi
 if ! grep -q 'data-mir-strategy' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'multi-index-reversal' "$HOME_DIR/server/multiIndexReversal/config.js"; then
