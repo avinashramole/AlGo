@@ -138,8 +138,9 @@ test("Reports hub exposes the Master report menu and download", () => {
   const dash = fs.readFileSync(path.join(root, "src/pages/Dashboard.tsx"), "utf8");
   const mobile = fs.readFileSync(path.join(root, "src/components/layout/MobileNav.tsx"), "utf8");
   const profile = fs.readFileSync(path.join(root, "src/pages/Profile.tsx"), "utf8");
-  assert.match(header, /data-master-header="true"/);
-  assert.match(header, /to="\/master-report"/);
+  assert.doesNotMatch(header, /data-master-header/);
+  assert.doesNotMatch(header, /to="\/master-report"/);
+  assert.doesNotMatch(header, /Master report/);
   assert.match(dash, /data-master-home="true"/);
   assert.match(mobile, /to: "\/master-report", label: "Master"/);
   assert.match(profile, /label="Master report" to="\/master-report"/);
