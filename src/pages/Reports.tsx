@@ -1,19 +1,15 @@
 import { useEffect, useState } from "react";
 import { SideBadge } from "../components/desk/Badges";
-import { downloadDeskReport, getPositionsDesk, type PositionLedger } from "../api/client";
+import { getPositionsDesk, type PositionLedger } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
-import { showDeskToast } from "../lib/deskToast";
-import { isNativeHybrid } from "../lib/hybrid";
-import { catchDeskError } from "../lib/liveSite";
 import { displayOrderReason, isEntryWhy, isExitHitReason } from "../lib/exitReason";
-import { cn, formatInr, formatIst, formatMobile, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName, whyColClass } from "../lib/format";
+import { cn, formatInr, formatIst, formatMobile, formatNumber, deskStrategyName, whyColClass } from "../lib/format";
 import { liveDailyPnl } from "../lib/dailyPnl";
 import { isLiveBrokerTrade } from "../lib/paperBook";
-import { MasterReport } from "./MasterReport";
 
-export function Reports({ embedded = false }: { embedded?: boolean }) {
+export function Reports({ embedded: _embedded = false }: { embedded?: boolean }) {
   const { user } = useAuth();
   const { data } = useMarket();
   const report = data.report;
@@ -38,18 +34,8 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
     };
   }, []);
 
-  const download = (format: "pdf" | "xlsx", mode?: "download" | "share") => {
-    void downloadDeskReport(format, mode).catch((error) => {
-      showDeskToast(catchDeskError(error, "Could not download the branded proposal report"));
-    });
-  };
-  const nativePdf = isNativeHybrid();
-
   return (
     <div className="space-y-3">
-      <div data-master-report-menu="true">
-        <MasterReport />
-      </div>
       {!report ? (
         <div className="card p-8 text-center">
           <div className="text-base font-bold">Report is loading</div>
@@ -58,55 +44,6 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
       ) : null}
       {report ? (
       <>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        {embedded ? null : (
-        <div>
-          <h1 className="text-xl font-bold">Reports</h1>
-          <p className="text-sm text-slate-400">
-            {liveBookCopy(data.dhanFeed?.live, hasDhanQuotes(data))}
-          </p>
-        </div>
-        )}
-        <div className="flex items-center gap-3">
-          {nativePdf ? (
-            <>
-              <button
-                type="button"
-                data-report-download="pdf"
-                onClick={() => download("pdf", "download")}
-                className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
-              >
-                Download
-              </button>
-              <button
-                type="button"
-                data-report-share="pdf"
-                onClick={() => download("pdf", "share")}
-                className="h-10 rounded-xl border border-brand-500 px-4 text-sm font-semibold text-brand-500"
-              >
-                Share
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              data-report-download="pdf"
-              onClick={() => download("pdf")}
-              className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
-            >
-              Download PDF
-            </button>
-          )}
-          <button
-            type="button"
-            data-report-download="xlsx"
-            onClick={() => download("xlsx")}
-            className="h-10 rounded-xl border border-brand-500 px-4 text-sm font-semibold text-brand-500"
-          >
-            Download Excel
-          </button>
-        </div>
-      </div>
       <section className="card overflow-x-auto p-0" data-profit-people="true">
         <div className="px-4 pt-4 text-sm font-bold">Profit</div>
         <table className="mt-2 w-full min-w-[720px] text-left text-sm">

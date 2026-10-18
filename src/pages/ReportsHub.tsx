@@ -1,13 +1,11 @@
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { ReportsBookTabs } from "../components/desk/ReportsBookTabs";
 import { useMarket } from "../context/MarketContext";
 import { tabFromParams } from "../lib/bookTabs";
 import { hasPaperActivity } from "../lib/paperBook";
-import { MasterReport } from "./MasterReport";
 import { Orders } from "./Orders";
 import { PaperTrading } from "./PaperTrading";
 import { PositionsDesk } from "./PositionsDesk";
-import { Reports } from "./Reports";
 
 export function ReportsHub() {
   const [params] = useSearchParams();
@@ -19,16 +17,13 @@ export function ReportsHub() {
     algos: data.algos,
   });
   const tab = tabFromParams(params.get("tab"), showPaper);
+  if (tab === "master") return <Navigate to="/master-report" replace />;
 
   return (
     <div className="space-y-2" data-reports-tabs="position-order-reports">
       <ReportsBookTabs active={tab} />
       {tab === "orders" ? (
         <Orders embedded book="live" />
-      ) : tab === "reports" ? (
-        <Reports embedded />
-      ) : tab === "master" ? (
-        <MasterReport />
       ) : tab === "paper" ? (
         <PaperTrading embedded />
       ) : (

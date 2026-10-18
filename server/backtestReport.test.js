@@ -295,9 +295,11 @@ test("desk download uses the same branded proposal PDF and Excel", () => {
   assert.match(deploy, /T2S_STANDARD_BRAND_REPORT/);
   assert.match(deploy, /Do not deploy an old backtestReport\.js/);
   const reports = fs.readFileSync(path.join(root, "src", "pages", "Reports.tsx"), "utf8");
-  assert.match(reports, /data-report-download="pdf"/);
-  assert.match(reports, /data-report-download="xlsx"/);
-  assert.equal(reports.includes("Download CSV"), false);
+  const masterPage = fs.readFileSync(path.join(root, "src", "pages", "MasterReport.tsx"), "utf8");
+  assert.match(masterPage, /data-report-download="pdf"/);
+  assert.match(masterPage, /data-report-download="xlsx"/);
+  assert.doesNotMatch(reports, /data-report-download="pdf"/);
+  assert.equal(masterPage.includes("Download CSV"), false);
   const book = fs.readFileSync(path.join(root, "src", "pages", "MemberBook.tsx"), "utf8");
   const index = fs.readFileSync(path.join(root, "server", "index.js"), "utf8");
   const client = fs.readFileSync(path.join(root, "src", "api", "client.ts"), "utf8");

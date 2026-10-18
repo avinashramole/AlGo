@@ -50,13 +50,6 @@ export function ReportsBookTabs({ active }: { active: BookTab }) {
         ) : null}
         <button
           type="button"
-          onClick={() => navigate(reportsBookPath("reports"))}
-          className={cn(active === "reports" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
-        >
-          Reports
-        </button>
-        <button
-          type="button"
           data-master-tab="true"
           onClick={() => navigate("/master-report")}
           className={cn(

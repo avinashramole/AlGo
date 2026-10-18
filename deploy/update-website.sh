@@ -236,8 +236,12 @@ if ! grep -q 'T2S_STANDARD_BRAND_REPORT' "$HOME_DIR/server/backtestReport.js" ||
   echo "FAIL: branded PDF/Excel backtest report is missing the T2S logo navy + orange colors. Do not deploy an old backtestReport.js."
   exit 1
 fi
-if ! grep -q 'data-report-download="pdf"' "$HOME_DIR/src/pages/Reports.tsx" || ! grep -q 'downloadDeskReport' "$HOME_DIR/src/api/client.ts"; then
-  echo "FAIL: Reports page still downloads a plain CSV. Deploy the branded PDF/Excel proposal buttons."
+if ! grep -q 'data-report-download="pdf"' "$HOME_DIR/src/pages/MasterReport.tsx" || ! grep -q 'data-report-download="xlsx"' "$HOME_DIR/src/pages/MasterReport.tsx" || ! grep -q 'downloadMasterReport' "$HOME_DIR/src/api/client.ts"; then
+  echo "FAIL: Master report is missing PDF/Excel download."
+  exit 1
+fi
+if grep -q 'data-report-download="pdf"' "$HOME_DIR/src/pages/Reports.tsx" || grep -q 'onClick={() => navigate(reportsBookPath("reports"))}' "$HOME_DIR/src/components/desk/ReportsBookTabs.tsx"; then
+  echo "FAIL: Old Reports tab/download is still on Position & Orders."
   exit 1
 fi
 

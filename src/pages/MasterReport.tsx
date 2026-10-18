@@ -81,26 +81,24 @@ export function MasterReport() {
     setPicked((ids) => (ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]));
   };
 
-  const download = (mode?: "download" | "share") => {
+  const payload = () => ({
+    includeAdmin,
+    includeUsers: !users.length || picked.length > 0,
+    userIds: picked,
+    range,
+    months,
+    from,
+    to,
+  });
+
+  const download = (format: "pdf" | "xlsx" = "pdf", mode?: "download" | "share") => {
     if (!selected) {
       setError("Select admin or at least one user.");
       return;
     }
-    setBusy(mode || "download");
+    setBusy(mode || format);
     setError("");
-    void downloadMasterReport(
-      {
-        includeAdmin,
-        includeUsers: !users.length || picked.length > 0,
-        userIds: picked,
-        range,
-        months,
-        from,
-        to,
-      },
-      "pdf",
-      mode,
-    )
+    void downloadMasterReport(payload(), format, mode)
       .catch((err) => {
         setError(catchDeskError(err, "Could not download the master report"));
         showDeskToast(catchDeskError(err, "Could not download the master report"));
@@ -113,7 +111,7 @@ export function MasterReport() {
       <section className="card p-4">
         <div className="text-sm font-bold">Master report</div>
         <p className="mt-1 text-xs text-slate-400">
-          Custom dates or 1 / 3 / 6 / 12 months. Admin and each user get a separate named portion in one PDF.
+          Custom dates or 1 / 3 / 6 / 12 months. Admin and each user get a separate named portion. Download PDF or Excel.
         </p>
         <div className="mt-3 flex flex-wrap gap-2" data-master-range="true">
           {MASTER_MONTH_PRESETS.map((span) => (
@@ -210,14 +208,15 @@ export function MasterReport() {
 
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div> : null}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3" data-master-report-menu="true">
         {nativePdf ? (
           <>
             <button
               type="button"
               data-master-download="pdf"
+              data-report-download="pdf"
               disabled={Boolean(busy) || !selected}
-              onClick={() => download("download")}
+              onClick={() => download("pdf", "download")}
               className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-50"
             >
               {busy === "download" ? "Preparing..." : `Download ${selected} in one PDF`}
@@ -226,22 +225,45 @@ export function MasterReport() {
               type="button"
               data-master-share="pdf"
               disabled={Boolean(busy) || !selected}
-              onClick={() => download("share")}
+              onClick={() => download("pdf", "share")}
               className="h-10 rounded-xl border border-brand-500 px-4 text-sm font-semibold text-brand-500 disabled:opacity-50"
             >
               {busy === "share" ? "Preparing..." : "Share PDF"}
             </button>
+            <button
+              type="button"
+              data-master-download="xlsx"
+              data-report-download="xlsx"
+              disabled={Boolean(busy) || !selected}
+              onClick={() => download("xlsx", "download")}
+              className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold disabled:opacity-50"
+            >
+              {busy === "xlsx" ? "Preparing..." : "Download Excel"}
+            </button>
           </>
         ) : (
-          <button
-            type="button"
-            data-master-download="pdf"
-            disabled={Boolean(busy) || !selected}
-            onClick={() => download()}
-            className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {busy ? "Preparing..." : `Download ${selected} account${selected === 1 ? "" : "s"} in one PDF`}
-          </button>
+          <>
+            <button
+              type="button"
+              data-master-download="pdf"
+              data-report-download="pdf"
+              disabled={Boolean(busy) || !selected}
+              onClick={() => download("pdf")}
+              className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {busy === "pdf" ? "Preparing..." : `Download ${selected} account${selected === 1 ? "" : "s"} in one PDF`}
+            </button>
+            <button
+              type="button"
+              data-master-download="xlsx"
+              data-report-download="xlsx"
+              disabled={Boolean(busy) || !selected}
+              onClick={() => download("xlsx")}
+              className="h-10 rounded-xl border border-brand-500 px-4 text-sm font-semibold text-brand-500 disabled:opacity-50"
+            >
+              {busy === "xlsx" ? "Preparing..." : "Download Excel"}
+            </button>
+          </>
         )}
       </div>
     </div>
