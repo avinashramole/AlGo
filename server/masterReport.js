@@ -87,10 +87,22 @@ function liveClosedTrades(userId) {
   return Array.isArray(book?.closedTrades) ? book.closedTrades : [];
 }
 
+export function personHeading(person) {
+  const name = String(person?.name || "").trim() || (person?.role === "admin" ? "Admin" : "User");
+  return person?.role === "admin" ? `Admin - ${name}` : `User - ${name}`;
+}
+
+function truthyFlag(value, fallback = true) {
+  if (value === false || value === "false" || value === "0") return false;
+  if (value === true || value === "true" || value === "1") return true;
+  return fallback;
+}
+
 function sectionReport(person, trades, window) {
   const desk = buildReport({ closedTrades: trades, positions: [], orders: [] });
-  return deskToProposalReport(desk, {
-    title: person.role === "admin" ? "Admin desk" : person.name || "User",
+  const heading = personHeading(person);
+  const report = deskToProposalReport(desk, {
+    title: heading,
     audience: "member",
     member: { name: person.name, email: person.email, mobile: person.mobile },
     from: window.from,
@@ -98,16 +110,25 @@ function sectionReport(person, trades, window) {
     months: window.months,
     range: window.range === "custom" ? `${window.from} to ${window.to}` : `last ${window.months} month(s)`,
   });
+  return {
+    ...report,
+    role: person.role === "admin" ? "admin" : "user",
+    heading,
+    trades: (report.trades || []).map((row) => ({ ...row, owner: person.name, ownerRole: person.role })),
+  };
 }
 
-export function buildMasterReport({ includeAdmin = true, userIds = [], range, months, from, to } = {}) {
+export function buildMasterReport({ includeAdmin = true, includeUsers, userIds = [], range, months, from, to } = {}) {
   const window = resolveMasterWindow({ range, months, from, to });
   const people = listMasterReportPeople();
   const wanted = [];
-  if (includeAdmin !== false) wanted.push(people.admin);
+  if (truthyFlag(includeAdmin, true)) wanted.push(people.admin);
   const allow = new Set((Array.isArray(userIds) ? userIds : []).map((id) => String(id || "").trim()).filter(Boolean));
-  for (const row of people.users) {
-    if (allow.has(row.id)) wanted.push(row);
+  const wantUsers = truthyFlag(includeUsers, true);
+  if (wantUsers) {
+    for (const row of people.users) {
+      if (!allow.size || allow.has(row.id)) wanted.push(row);
+    }
   }
   if (!wanted.length) {
     const error = new Error("Select admin or at least one user.");
@@ -131,7 +152,7 @@ export function buildMasterReport({ includeAdmin = true, userIds = [], range, mo
       product: "T2S",
       symbol: "ALL",
       kind: "desk",
-      summary: "Trade 2 Smart master report · admin and selected users in one PDF",
+      summary: "Trade 2 Smart master report · admin and each user in a separate named portion",
     },
     summary: {
       from: window.from,

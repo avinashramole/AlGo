@@ -15,9 +15,10 @@ fs.writeFileSync(process.env.T2S_USERS_FILE, "[]\n");
 fs.writeFileSync(process.env.T2S_SESSIONS_FILE, "{}\n");
 
 const { archiveTrades, mergeLiveAndArchived, tradeInWindow } = await import("./tradeArchive.js");
-const { clampMasterMonths, resolveMasterWindow, buildMasterReport } = await import("./masterReport.js");
+const { clampMasterMonths, personHeading, resolveMasterWindow, buildMasterReport } = await import("./masterReport.js");
 const { brandedReportFile, renderBacktestPdf, reportDownloadName } = await import("./backtestReport.js");
 const { saveClientSettings } = await import("./memberDesk.js");
+const { createClient } = await import("./clients.js");
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -54,26 +55,40 @@ test("archived trades keep only the selected date window", () => {
 });
 
 test("master PDF puts admin and user identity in one file", () => {
-  saveClientSettings("u-tape", { brokerId: "paper" });
+  const member = createClient({
+    name: "Tape Tester",
+    email: "tapetester@gmail.com",
+    mobile: "9876543210",
+    brokerId: "paper",
+  });
+  saveClientSettings(member.id, { brokerId: "paper" });
   archiveTrades("admin", [
     { id: "a1", symbol: "NIFTY 25000 CE", side: "BUY", qty: 65, entry: 100, exit: 110, pnl: 650, closedAt: "2026-10-16T10:00:00.000Z" },
   ]);
-  archiveTrades("u-tape", [
+  archiveTrades(member.id, [
     { id: "u1", symbol: "CRUDEOIL 5400 CE", side: "SELL", qty: 1, entry: 80, exit: 70, pnl: 10, closedAt: "2026-10-16T10:00:00.000Z" },
   ]);
   const report = buildMasterReport({
     includeAdmin: true,
+    includeUsers: true,
     userIds: [],
     range: "custom",
     from: "2026-10-01",
     to: "2026-10-17",
   });
   assert.equal(report.audience, "master");
-  assert.ok(report.sections.length >= 1);
+  assert.ok(report.sections.length >= 2);
+  assert.equal(report.sections[0].heading, personHeading({ role: "admin", name: report.sections[0].member.name }));
+  assert.match(report.sections[0].heading, /^Admin - /);
+  assert.equal(report.sections.some((row) => row.heading === "User - Tape Tester"), true);
   assert.equal(reportDownloadName(report, "pdf"), "Trade2Smart-Master-report.pdf");
   const pdf = renderBacktestPdf(report).toString("latin1");
   assert.match(pdf, /Master report/);
   assert.match(pdf, /in this PDF/);
+  assert.match(pdf, /ACCOUNTS/);
+  assert.match(pdf, /Admin - /);
+  assert.match(pdf, /User - Tape Tester/);
+  assert.match(pdf, /Tape Tester trades/);
   const file = brandedReportFile(report, "pdf", { name: "Desk Admin" });
   assert.equal(file.name, "Trade2Smart-Master-report.pdf");
   assert.equal(file.body.length > 800, true);
@@ -97,7 +112,10 @@ test("Reports hub exposes the Master report menu and download", () => {
   assert.match(page, /data-master-report-page="true"/);
   assert.match(page, /data-master-report="true"/);
   assert.match(page, /Custom date/);
+  assert.match(page, /separate named portion in one PDF/);
+  assert.match(page, /includeUsers: !users.length \|\| picked.length > 0/);
   assert.match(page, /MASTER_MONTH_PRESETS/);
+  assert.match(index, /includeUsers:/);
   assert.match(page, /data-master-admin="true"/);
   assert.match(page, /Select all users/);
   assert.match(page, /Download \$\{selected\}/);

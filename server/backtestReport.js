@@ -679,6 +679,47 @@ export function renderBacktestExcel(report) {
   ];
   const fills = report.legs?.length ? report.legs : report.trades || [];
   const tableWidths = [6, 12, 8, 8, 10, 18, 16, 16, 12, 12, 8, 12, 14, 10, 12, 8];
+  if (isMasterReport(report)) {
+    const used = new Set(["Summary"]);
+    const sheets = [
+      {
+        name: "Summary",
+        rows: [
+          ...summaryRows,
+          [],
+          excelHeaderRow(["Account", "Name", "Email", "Mobile", "P&L", "Trades"]),
+          ...(report.sections || []).map((row, i) => {
+            const zebra = i % 2 === 1;
+            const body = zebra ? XLSX_STYLE.zebra : XLSX_STYLE.body;
+            const money = zebra ? XLSX_STYLE.moneyZebra : XLSX_STYLE.money;
+            return [
+              { v: row.heading || (row.role === "admin" ? "Admin" : "User"), s: body },
+              { v: row.member?.name || "", s: body },
+              { v: row.member?.email || "", s: body },
+              { v: row.member?.mobile || "", s: body },
+              { v: Number(row.summary?.pnl || 0), s: money },
+              { v: Number(row.summary?.trades || 0), s: body },
+            ];
+          }),
+        ],
+        widths: [36, 72],
+        freeze: 4,
+      },
+      ...(report.sections || []).map((row, index) => {
+        const heading = row.heading || row.member?.name || `Account ${index + 1}`;
+        let name = String(heading).replace(/[:\\/?*\[\]]/g, " ").trim().slice(0, 31) || `Account ${index + 1}`;
+        if (used.has(name)) name = `${name.slice(0, 28)} ${index + 1}`.slice(0, 31);
+        used.add(name);
+        return {
+          name,
+          rows: excelBookRows(row.trades || [], heading, memberProfileLine(row)),
+          widths: tableWidths,
+          freeze: 5,
+        };
+      }),
+    ];
+    return buildXlsx(sheets);
+  }
   if (isMemberReport(report)) {
     const line = memberProfileLine(report);
     return buildXlsx([
@@ -953,11 +994,12 @@ function makePdfDoc(report) {
     y -= 8;
   }
 
-  function renderPerson(person, { continued = false } = {}) {
-    if (continued) {
-      flush();
-      header({ continued: false });
-    }
+  function renderPerson(person) {
+    flush();
+    header({ continued: false });
+    const heading = person.heading || memberProfileLine(person);
+    const name = person.member?.name || heading;
+    section(heading);
     line(memberProfileLine(person), PDF_MEMBER_IDENTITY_FONT, "F2");
     metricGrid(
       [
@@ -968,7 +1010,7 @@ function makePdfDoc(report) {
       ],
       4,
     );
-    section("TRADES");
+    section(`${name} trades`);
     table(person.trades || []);
   }
 
@@ -1008,8 +1050,12 @@ function makePdfDoc(report) {
       ],
       4,
     );
-    (report.sections || []).forEach((row, index) => {
-      renderPerson(row, { continued: index > 0 });
+    section("ACCOUNTS");
+    for (const row of report.sections || []) {
+      line(row.heading || memberProfileLine(row), PDF_MEMBER_IDENTITY_FONT, "F2");
+    }
+    (report.sections || []).forEach((row) => {
+      renderPerson(row);
     });
   } else if (member) {
     metricGrid(

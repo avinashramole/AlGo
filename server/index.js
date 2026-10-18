@@ -1709,6 +1709,7 @@ app.post("/api/report/master/download", (req, res) => {
   try {
     const report = buildMasterReport({
       includeAdmin: req.body?.includeAdmin !== false && req.body?.includeAdmin !== "0",
+      includeUsers: req.body?.includeUsers !== false && req.body?.includeUsers !== "0",
       userIds: Array.isArray(req.body?.userIds)
         ? req.body.userIds
         : String(req.body?.userIds || req.query.userIds || "")

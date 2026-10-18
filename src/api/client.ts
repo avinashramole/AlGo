@@ -1881,6 +1881,7 @@ export type MasterReportPeople = {
 
 export type MasterReportPayload = {
   includeAdmin: boolean;
+  includeUsers?: boolean;
   userIds: string[];
   range: "custom" | "months";
   months?: number;

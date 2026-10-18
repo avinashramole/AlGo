@@ -91,6 +91,7 @@ export function MasterReport() {
     void downloadMasterReport(
       {
         includeAdmin,
+        includeUsers: !users.length || picked.length > 0,
         userIds: picked,
         range,
         months,
@@ -112,7 +113,7 @@ export function MasterReport() {
       <section className="card p-4">
         <div className="text-sm font-bold">Master report</div>
         <p className="mt-1 text-xs text-slate-400">
-          Custom dates or 1 / 3 / 6 / 12 months. Pick admin and how many users to include. One PDF.
+          Custom dates or 1 / 3 / 6 / 12 months. Admin and each user get a separate named portion in one PDF.
         </p>
         <div className="mt-3 flex flex-wrap gap-2" data-master-range="true">
           {MASTER_MONTH_PRESETS.map((span) => (
