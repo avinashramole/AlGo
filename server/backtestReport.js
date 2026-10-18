@@ -1054,10 +1054,6 @@ function makePdfDoc(report) {
       ],
       4,
     );
-    section("ACCOUNTS");
-    for (const row of report.sections || []) {
-      line(row.heading || memberProfileLine(row), PDF_MEMBER_IDENTITY_FONT, "F2");
-    }
     (report.sections || []).forEach((row) => {
       renderPerson(row);
     });

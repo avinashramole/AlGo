@@ -85,7 +85,7 @@ test("master PDF puts admin and user identity in one file", () => {
   const pdf = renderBacktestPdf(report).toString("latin1");
   assert.match(pdf, /Master report/);
   assert.match(pdf, /in this PDF/);
-  assert.match(pdf, /ACCOUNTS/);
+  assert.doesNotMatch(pdf, /\(ACCOUNTS\)/);
   assert.match(pdf, /Admin - /);
   assert.match(pdf, /User - Tape Tester/);
   assert.match(pdf, /Tape Tester trades/);
@@ -95,6 +95,7 @@ test("master PDF puts admin and user identity in one file", () => {
   assert.match(pdf, /\/ca 0\.18/);
   assert.equal(pdf.includes("0.000 0.059 0.161"), false);
   const reportSrc = fs.readFileSync(path.join(root, "server/backtestReport.js"), "utf8");
+  assert.doesNotMatch(reportSrc, /section\("ACCOUNTS"\)/);
   assert.match(reportSrc, /function usesMemberPdfTheme\(report\)/);
   assert.match(reportSrc, /isMemberReport\(report\) \|\| isMasterReport\(report\)/);
   const file = brandedReportFile(report, "pdf", { name: "Desk Admin" });
