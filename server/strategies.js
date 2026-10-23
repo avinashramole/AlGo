@@ -258,6 +258,13 @@ export function strikeOffsetLabel(offset) {
   return n > 0 ? `ATM+${n}` : `ATM${n}`;
 }
 
+export function wingOffsetLabel(offset) {
+  const n = Math.max(-5, Math.min(5, Math.round(Number(offset) || 0)));
+  if (n === 0) return "ATM";
+  const mag = Math.abs(n);
+  return n > 0 ? `ATM+${mag} CE+/PE−` : `ATM−${mag} CE−/PE+`;
+}
+
 export function contractLabel(algo) {
   if (isNiftyVwapHedgeAlgo(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalAlgo(algo)) return "NIFTY weekly ATM CE/PE";
@@ -268,7 +275,7 @@ export function contractLabel(algo) {
   }
   if (isMultiIndexReversalAlgo(algo)) {
     const cfg = multiIndexReversalConfig(algo);
-    return `${cfg.indexLabel} ${cfg.exchange} ${cfg.timeframe} ATM${cfg.strikeOffset ? (cfg.strikeOffset > 0 ? `+${cfg.strikeOffset}` : cfg.strikeOffset) : ""} CE/PE`;
+    return `${cfg.indexLabel} ${cfg.exchange} ${cfg.timeframe} ${wingOffsetLabel(cfg.strikeOffset)} CE/PE`;
   }
   if (isNiftyTest1Algo(algo)) return `${algo.symbol || "NIFTY"} ATM CE/PE`;
   if (isNiftyTest2Algo(algo)) {
@@ -277,14 +284,15 @@ export function contractLabel(algo) {
     return `${algo.symbol || "NIFTY"} ${sell} SELL + ${hedge} BUY premium`;
   }
   if (isCrudeFirstCandleAlgo(algo)) {
-    const wing = strikeOffsetLabel(algo.strikeOffset);
-    return `CRUDE OIL ${wing === "ATM" ? "ATM" : wing} CE+/PE− first ${algo.timeframe || "5m"}`;
+    return `CRUDE OIL ${wingOffsetLabel(algo.strikeOffset)} CE/PE first ${algo.timeframe || "5m"}`;
   }
-  if (isNiftyFirstCandleAlgo(algo)) return `NIFTY ATM CE/PE first ${algo.timeframe || "5m"}`;
+  if (isNiftyFirstCandleAlgo(algo)) {
+    return `NIFTY ${wingOffsetLabel(algo.strikeOffset)} CE/PE first ${algo.timeframe || "5m"}`;
+  }
   if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {
-    return `${symbol} ${algo.optionType === "PE" ? "PE" : "CE"} ${strikeOffsetLabel(algo.strikeOffset)}`;
+    return `${symbol} ${algo.optionType === "PE" ? "PE" : "CE"} ${wingOffsetLabel(algo.strikeOffset)}`;
   }
   return `${symbol} FUT`;
 }
@@ -339,14 +347,14 @@ export function summarizeAlgo(algo) {
   }
   if (isMultiIndexReversalAlgo(algo)) {
     const cfg = multiIndexReversalConfig(algo);
-    return `${cfg.indexLabel} ${cfg.exchange} · ${cfg.timeframe} · offset ${cfg.strikeOffset} · index+option candle · CE green/green · PE red+green · ${CANDLE_ENTRY_RULE} · TGT ${cfg.initialTargetPct}% · reverse −${cfg.reversalLossPct}% ×${cfg.reversalQtyMultiple} · combined +${cfg.combinedTargetPct}% ${cfg.combinedTargetBasis} · ${algo.runMode === "live" ? "Live" : "Paper"} · ${size}`;
+    return `${cfg.indexLabel} ${cfg.exchange} · ${cfg.timeframe} · ${wingOffsetLabel(cfg.strikeOffset)} · CE ATM+ / PE ATM− · index+option candle · CE green/green · PE red+green · ${CANDLE_ENTRY_RULE} · TGT ${cfg.initialTargetPct}% · reverse −${cfg.reversalLossPct}% ×${cfg.reversalQtyMultiple} · combined +${cfg.combinedTargetPct}% ${cfg.combinedTargetBasis} · ${algo.runMode === "live" ? "Live" : "Paper"} · ${size}`;
   }
   if (isCrudeFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
     const tgt = algo.targetPct || 40;
     const endAt = algo.endTimeIst || "23:15";
     const maxTrades = clampDailyTradeLimit(algo.maxTradesPerDay, 5);
-    const wing = strikeOffsetLabel(algo.strikeOffset);
+    const wing = wingOffsetLabel(algo.strikeOffset);
     return `CRUDE OIL FUT every ${tf} candle · monthly ${wing} · CE ATM+ / PE ATM− · check each completed ${tf} from ${algo.firstBarStartIst || "09:00"} IST until a signal · one signal places one order · max ${maxTrades} trades/day · CRUDE FUT + CE green and PE red → BUY CE · CRUDE FUT + PE green and CE red → BUY PE · ${CANDLE_ENTRY_RULE} · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
   }
   if (isNiftyFirstCandleAlgo(algo)) {
@@ -358,9 +366,9 @@ export function summarizeAlgo(algo) {
     const endAt = algo.endTimeIst || "15:15";
     const expiry = algo.expiryKind === "monthly" ? "monthly ATM" : "weekly ATM";
     const maxTrades = clampDailyTradeLimit(algo.maxTradesPerDay, 5);
-    const atm = strikeOffsetLabel(algo.strikeOffset);
+    const atm = wingOffsetLabel(algo.strikeOffset);
     const trail = niftyFirstCandleTrail(algo);
-    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview ${tf} open/close at the next candle open · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · current candle close is not used · ${CANDLE_ENTRY_RULE} · SL ${sl}% / TGT ${tgt}% · trailing SL +${trail.trailingActivationPct}% to buy, then +${trail.trailingShiftPct}% every +${trail.trailingEveryPct}% · max ${maxTrades} trades/day · daily LIVE ${start} IST · ${size}`;
+    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · CE ATM+ / PE ATM− · preview ${tf} open/close at the next candle open · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview CE green → BUY CE · preview NIFTY FUT red + preview PE green → BUY PE · current candle close is not used · ${CANDLE_ENTRY_RULE} · SL ${sl}% / TGT ${tgt}% · trailing SL +${trail.trailingActivationPct}% to buy, then +${trail.trailingShiftPct}% every +${trail.trailingEveryPct}% · max ${maxTrades} trades/day · daily LIVE ${start} IST · ${size}`;
   }
   if (isNiftyVwapAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

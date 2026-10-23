@@ -2248,7 +2248,7 @@ function firstCandleAtmSpot(root, futPx) {
 function firstCandleSelectedStrike(root, futPx, step, offset, option = "") {
   const spot = firstCandleAtmSpot(root, futPx);
   const fromSpot =
-    String(root || "").toUpperCase() === "CRUDEOIL" && (option === "CE" || option === "PE")
+    option === "CE" || option === "PE"
       ? OptionStrikeSelector.strikeForWingOffset(spot, step, offset, option)
       : OptionStrikeSelector.strikeForOffset(spot, step, offset);
   if (saneUnderlyingPx(root, fromSpot)) return fromSpot;
@@ -2955,10 +2955,10 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const spot = isFirstCandleAlgo(algo) ? firstCandleAtmSpot(root, futSpot) : Number(getChainSpot(root)) || futSpot;
   const selectedCe = isFirstCandleAlgo(algo)
     ? firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset, "CE")
-    : OptionStrikeSelector.strikeForOffset(spot, und.step, config.strikeOffset);
+    : OptionStrikeSelector.strikeForWingOffset(spot, und.step, config.strikeOffset, "CE");
   const selectedPe = isFirstCandleAlgo(algo)
     ? firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset, "PE")
-    : OptionStrikeSelector.strikeForOffset(spot, und.step, config.strikeOffset);
+    : OptionStrikeSelector.strikeForWingOffset(spot, und.step, config.strikeOffset, "PE");
   const ceStrike =
     usableFirstCandleStrike(root, vs.lockedOption === "CE" ? vs.lockedStrike : 0) || selectedCe;
   const peStrike =
@@ -3405,14 +3405,16 @@ export function resolveAlgoTrade(algo) {
     const vs = algo.vwapState || {};
     const hs = algo.hedgeState || {};
     const offset = isNiftyFirstCandleAlgo(algo) ? algo.strikeOffset : 0;
-    const selected = OptionStrikeSelector.strikeForOffset(spot, und.step, offset);
-    const strike = Number(vs.lockedStrike) || selected;
+    const ceStrike = OptionStrikeSelector.strikeForWingOffset(spot, und.step, offset, "CE");
+    const peStrike = OptionStrikeSelector.strikeForWingOffset(spot, und.step, offset, "PE");
     const option =
       vs.lockedOption === "PE" || hs.primarySide === "PE"
         ? "PE"
         : vs.lockedOption === "CE" || hs.primarySide === "CE"
           ? "CE"
           : "";
+    const selected = option === "PE" ? peStrike : ceStrike;
+    const strike = Number(vs.lockedStrike) || selected;
     const weeklyCard =
       isNiftyVwapReversalAlgo(algo) ||
       isNiftyVwapHedgeAlgo(algo) ||
@@ -3422,12 +3424,19 @@ export function resolveAlgoTrade(algo) {
       ? nearestWeeklyExpiry(niftyListedExpiries(pack, symbol), symbol) || pack?.meta?.expiry || upcomingExpiries(und.id)[0] || ""
       : pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
     const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
-    const ceLtp = Number(row?.callLtp);
-    const peLtp = Number(row?.putLtp);
+    const ceRow = (pack?.rows || []).find((item) => Number(item.strike) === Number(ceStrike));
+    const peRow = (pack?.rows || []).find((item) => Number(item.strike) === Number(peStrike));
+    const ceLtp = Number((option === "PE" ? ceRow : row || ceRow)?.callLtp);
+    const peLtp = Number((option === "CE" ? peRow : row || peRow)?.putLtp);
     const liveChain = pack?.meta?.source === "dhan";
     const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
     const securityId = optionLegId(strike, option || "CE", symbol, expiry);
-    const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike} ${strikeOffsetLabel(offset)}`;
+    const offsetLabel = strikeOffsetLabel(offset);
+    const contract = option
+      ? `${symbol} ${strike} ${option}`
+      : offset
+        ? `${symbol} CE ${ceStrike || "ATM"} / PE ${peStrike || "ATM"} ${offsetLabel}`
+        : `${symbol} ${strike} ${offsetLabel}`;
     let hint = "";
     if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
     else if (
@@ -3437,9 +3446,13 @@ export function resolveAlgoTrade(algo) {
       normalizeExpiry(pack.meta.expiry) !== normalizeExpiry(expiry)
     ) {
       hint = `Waiting for weekly ${expiry} chain (not monthly)`;
-    } else if (!row) hint = `No ${strike} ATM on the ${symbol} tape yet`;
+    } else if (!row && !ceRow && !peRow) hint = `No ${strike || offsetLabel} ATM on the ${symbol} tape yet`;
     else if (!(ceLtp > 0) && !(peLtp > 0)) hint = "Waiting for live ATM option LTP";
-    else hint = `CE ${ceLtp > 0 ? ceLtp : "—"} · PE ${peLtp > 0 ? peLtp : "—"}`;
+    else {
+      hint = offset
+        ? `CE ${ceStrike || "—"} ${ceLtp > 0 ? ceLtp : "—"} · PE ${peStrike || "—"} ${peLtp > 0 ? peLtp : "—"}`
+        : `CE ${ceLtp > 0 ? ceLtp : "—"} · PE ${peLtp > 0 ? peLtp : "—"}`;
+    }
     const weeklyReady =
       !weeklyCard ||
       !expiry ||
@@ -3481,8 +3494,7 @@ export function resolveAlgoTrade(algo) {
   const und = getUnderlying(symbol);
   const pack = chainForSymbol(symbol);
   const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);
-  const atm = atmStrike(spot, und.step);
-  const strike = atm + offset * und.step;
+  const strike = OptionStrikeSelector.strikeForWingOffset(spot, und.step, offset, option);
   const expiry = pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
   const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
   const ltp = option === "PE" ? Number(row?.putLtp) : Number(row?.callLtp);

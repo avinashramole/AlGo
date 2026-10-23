@@ -27,17 +27,17 @@ const OPERATORS = [
   { id: "eq", label: "=" },
 ];
 const STRIKE_OFFSETS: Array<[string, string]> = [
-  ["-5", "ATM-5"],
-  ["-4", "ATM-4"],
-  ["-3", "ATM-3"],
-  ["-2", "ATM-2"],
-  ["-1", "ATM-1"],
+  ["-5", "ATM-5 CE-/PE+"],
+  ["-4", "ATM-4 CE-/PE+"],
+  ["-3", "ATM-3 CE-/PE+"],
+  ["-2", "ATM-2 CE-/PE+"],
+  ["-1", "ATM-1 CE-/PE+"],
   ["0", "ATM"],
-  ["1", "ATM+1"],
-  ["2", "ATM+2"],
-  ["3", "ATM+3"],
-  ["4", "ATM+4"],
-  ["5", "ATM+5"],
+  ["1", "ATM+1 CE+/PE-"],
+  ["2", "ATM+2 CE+/PE-"],
+  ["3", "ATM+3 CE+/PE-"],
+  ["4", "ATM+4 CE+/PE-"],
+  ["5", "ATM+5 CE+/PE-"],
 ];
 const LEFTS = ["price", "vwap", "ema_fast", "ema_slow", "rsi", "macd", "supertrend", "or_high", "or_low"];
 const RIGHTS = ["vwap", "ema_slow", "supertrend", "or_high", "or_low", "lookback_high", "lookback_low", "value"];

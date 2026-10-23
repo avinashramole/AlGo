@@ -488,11 +488,15 @@ export function strikeOffsetLabel(offset?: number) {
   return OPTION_OFFSETS.find((row) => row.id === n)?.label || "ATM";
 }
 
-export function crudeOffsetLabel(offset?: number) {
+export function wingOffsetLabel(offset?: number) {
   const n = Math.max(-5, Math.min(5, Math.round(Number(offset) || 0)));
   if (n === 0) return "ATM";
   const mag = Math.abs(n);
   return n > 0 ? `ATM + ${mag} · CE +${mag} / PE −${mag}` : `ATM − ${mag} · CE −${mag} / PE +${mag}`;
+}
+
+export function crudeOffsetLabel(offset?: number) {
+  return wingOffsetLabel(offset);
 }
 
 export function isNiftyVwapKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
@@ -745,7 +749,7 @@ export function contractLabel(algo: {
   }
   if (isMultiIndexReversalKind(algo)) {
     const off = Number(algo.strikeOffset || 0);
-    return `${algo.symbol || "NIFTY"} ${algo.timeframe || "15m"} ${off ? `ATM${off > 0 ? `+${off}` : off}` : "ATM"} CE/PE`;
+    return `${algo.symbol || "NIFTY"} ${algo.timeframe || "15m"} ${wingOffsetLabel(off)} CE/PE`;
   }
   if (isNiftyTest1Kind(algo)) return `${algo.symbol || "NIFTY"} ATM CE/PE`;
   if (isNiftyTest2Kind(algo)) {
@@ -753,12 +757,12 @@ export function contractLabel(algo: {
     const hedge = algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly";
     return `${algo.symbol || "NIFTY"} ${sell} SELL + ${hedge} BUY`;
   }
-  if (isCrudeFirstCandleKind(algo)) return `CRUDE OIL ATM CE/PE first ${algo.timeframe || "5m"}`;
-  if (isNiftyFirstCandleKind(algo)) return `NIFTY ATM CE/PE first ${algo.timeframe || "5m"}`;
+  if (isCrudeFirstCandleKind(algo)) return `CRUDE OIL ${wingOffsetLabel(algo.strikeOffset)} CE/PE first ${algo.timeframe || "5m"}`;
+  if (isNiftyFirstCandleKind(algo)) return `NIFTY ${wingOffsetLabel(algo.strikeOffset)} CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {
-    return `${symbol} ${algo.optionType === "PE" ? "PE" : "CE"} ${strikeOffsetLabel(algo.strikeOffset)}`;
+    return `${symbol} ${algo.optionType === "PE" ? "PE" : "CE"} ${wingOffsetLabel(algo.strikeOffset)}`;
   }
   return `${symbol} FUT`;
 }

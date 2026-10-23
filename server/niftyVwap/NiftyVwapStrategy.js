@@ -73,12 +73,9 @@ function niftyFutCandleText(signal, config) {
   return { open, close, clock: clock ? ` · ${clock}` : "" };
 }
 
-function trackedOptionStrike(state, spot, step, strikeOffset, option, symbol) {
+function trackedOptionStrike(state, spot, step, strikeOffset, option) {
   if (state?.lockedOption === option && Number(state.lockedStrike) > 0) return Number(state.lockedStrike);
-  if (String(symbol || "").toUpperCase() === "CRUDEOIL") {
-    return OptionStrikeSelector.strikeForWingOffset(spot, step, strikeOffset, option);
-  }
-  return OptionStrikeSelector.strikeForOffset(spot, step, strikeOffset);
+  return OptionStrikeSelector.strikeForWingOffset(spot, step, strikeOffset, option);
 }
 
 function optionColorText(option, color, strike) {
@@ -313,8 +310,8 @@ export const NiftyVwapStrategy = {
           algo.lastSignal = clock ? `MISSED ${clock}` : "MISSED CANDLE";
           return { action: "wait", reason: "missed-open" };
         }
-        const ceTrack = trackedOptionStrike(state, spot, step, config.strikeOffset, "CE", config.symbol);
-        const peTrack = trackedOptionStrike(state, spot, step, config.strikeOffset, "PE", config.symbol);
+        const ceTrack = trackedOptionStrike(state, spot, step, config.strikeOffset, "CE");
+        const peTrack = trackedOptionStrike(state, spot, step, config.strikeOffset, "PE");
         if (signal.niftyColor === "doji") {
           return { action: "wait", reason: "first-doji" };
         }

@@ -145,14 +145,8 @@ export function runNiftyVwapBacktest(algo, candles = []) {
       const bar = session[i];
       futAll.push(bar);
       const spot = Number(bar.close);
-      const ceStrike =
-        String(cfg.symbol || "").toUpperCase() === "CRUDEOIL"
-          ? OptionStrikeSelector.strikeForWingOffset(spot, 50, cfg.strikeOffset, "CE")
-          : OptionStrikeSelector.strikeForOffset(spot, 50, cfg.strikeOffset);
-      const peStrike =
-        String(cfg.symbol || "").toUpperCase() === "CRUDEOIL"
-          ? OptionStrikeSelector.strikeForWingOffset(spot, 50, cfg.strikeOffset, "PE")
-          : OptionStrikeSelector.strikeForOffset(spot, 50, cfg.strikeOffset);
+      const ceStrike = OptionStrikeSelector.strikeForWingOffset(spot, 50, cfg.strikeOffset, "CE");
+      const peStrike = OptionStrikeSelector.strikeForWingOffset(spot, 50, cfg.strikeOffset, "PE");
       const expiry = sessionKeyIST(bar.time);
       const ceBar = optionBarAt(bar, "CE", { symbol: cfg.symbol, strike: ceStrike });
       const peBar = optionBarAt(bar, "PE", { symbol: cfg.symbol, strike: peStrike });

@@ -152,13 +152,66 @@ test("nifty first candle ATM+2 and ATM-2 resolve to 22800 and 22600, not the ATM
   assert.equal(plusTrade.strike, 22800);
   assert.equal(plusTrade.securityId, "ce-22800");
   assert.match(String(plusTrade.symbol), /22800/);
+  assert.match(String(plusTrade.symbol), /22600/);
   assert.doesNotMatch(String(plusTrade.symbol), /22700/);
+  assert.match(String(plusTrade.hint), /CE 22800/);
+  assert.match(String(plusTrade.hint), /PE 22600/);
+
+  const lockedPe = normalizeAlgo({ name: "NIFTY 5m first candle", kind: "nifty-first-candle", strikeOffset: 2 });
+  lockedPe.vwapState = { lockedOption: "PE", lockedStrike: 22600 };
+  const peTrade = resolveAlgoTrade(lockedPe);
+  assert.equal(peTrade.option, "PE");
+  assert.equal(peTrade.strike, 22600);
+  assert.equal(peTrade.securityId, "pe-22600");
+  assert.match(String(peTrade.symbol), /NIFTY 22600 PE/);
 
   const minus = normalizeAlgo({ name: "NIFTY 5m first candle", kind: "nifty-first-candle", strikeOffset: -2 });
   const minusTrade = resolveAlgoTrade(minus);
   assert.equal(minusTrade.strike, 22600);
   assert.equal(minusTrade.securityId, "ce-22600");
   assert.match(String(minusTrade.symbol), /22600/);
+  assert.match(String(minusTrade.hint), /CE 22600/);
+  assert.match(String(minusTrade.hint), /PE 22800/);
+});
+
+test("generic option ATM+2 buys CE above ATM and PE below ATM", () => {
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry: "2026-10-28",
+    expiries: ["2026-10-28"],
+    spot: 22720,
+    source: "dhan",
+    rows: [
+      { strike: 22600, atm: false, callLtp: 180, putLtp: 40, callId: "ce-22600", putId: "pe-22600" },
+      { strike: 22700, atm: true, callLtp: 110, putLtp: 95, callId: "ce-22700", putId: "pe-22700" },
+      { strike: 22800, atm: false, callLtp: 48, putLtp: 170, callId: "ce-22800", putId: "pe-22800" },
+    ],
+  });
+  const ce = normalizeAlgo({
+    name: "NIFTY VWAP ATM",
+    kind: "indicator",
+    symbol: "NIFTY",
+    instrument: "option",
+    optionType: "CE",
+    strikeOffset: 2,
+    indicator: "VWAP",
+  });
+  const ceTrade = resolveAlgoTrade(ce);
+  assert.equal(ceTrade.strike, 22800);
+  assert.equal(ceTrade.securityId, "ce-22800");
+
+  const pe = normalizeAlgo({
+    name: "NIFTY VWAP ATM",
+    kind: "indicator",
+    symbol: "NIFTY",
+    instrument: "option",
+    optionType: "PE",
+    strikeOffset: 2,
+    indicator: "VWAP",
+  });
+  const peTrade = resolveAlgoTrade(pe);
+  assert.equal(peTrade.strike, 22600);
+  assert.equal(peTrade.securityId, "pe-22600");
 });
 
 test("resolveAlgoTrade uses the CRUDEOIL option chain and keeps it after switching to NIFTY", () => {

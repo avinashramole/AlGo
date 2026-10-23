@@ -49,10 +49,7 @@ export const OptionStrikeSelector = {
       };
     }
     const opt = option === "PE" ? "PE" : "CE";
-    const strike =
-      String(symbol || "").toUpperCase() === "CRUDEOIL"
-        ? strikeForWingOffset(spot, step, strikeOffset, opt)
-        : strikeForOffset(spot, step, strikeOffset);
+    const strike = strikeForWingOffset(spot, step, strikeOffset, opt);
     return {
       strike,
       option: opt,

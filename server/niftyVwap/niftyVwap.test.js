@@ -1578,11 +1578,13 @@ test("first candle ATM offset is applied to the strike", () => {
   assert.equal(OptionStrikeSelector.strikeForWingOffset(6120, 50, 2, "PE"), 6000);
   assert.equal(OptionStrikeSelector.strikeForWingOffset(6120, 50, -2, "CE"), 6000);
   assert.equal(OptionStrikeSelector.strikeForWingOffset(6120, 50, -2, "PE"), 6200);
+  assert.equal(OptionStrikeSelector.select({ spot: 22720, step: 50, option: "PE", strikeOffset: 2 }).strike, 22600);
+  assert.equal(OptionStrikeSelector.select({ spot: 22720, step: 50, option: "CE", strikeOffset: 2 }).strike, 22800);
   assert.equal(niftyFirstCandleConfig({ strikeOffset: 5 }).strikeOffset, 5);
   assert.equal(niftyFirstCandleConfig({ strikeOffset: -5 }).strikeOffset, -5);
 });
 
-test("first candle ATM+2 and ATM-2 orders use that strike, not ATM", () => {
+test("first candle ATM+2 and ATM-2 orders use OTM wings, not the same strike", () => {
   const plus = defaultNiftyFirstCandleAlgo({ name: "First candle plus two", strikeOffset: 2 });
   const plusBook = bookAdapter();
   const plusTick = NiftyVwapStrategy.tick({
@@ -1596,7 +1598,7 @@ test("first candle ATM+2 and ATM-2 orders use that strike, not ATM", () => {
     ceLtp: 96,
     peLtp: 90,
     ceSecurityId: "ce-22800",
-    peSecurityId: "pe-22800",
+    peSecurityId: "pe-22600",
     spot: 22720,
     step: 50,
     expiry: "2026-08-27",
@@ -1622,7 +1624,7 @@ test("first candle ATM+2 and ATM-2 orders use that strike, not ATM", () => {
     ceLtp: 70,
     peLtp: 110,
     ceSecurityId: "ce-22600",
-    peSecurityId: "pe-22600",
+    peSecurityId: "pe-22800",
     spot: 22720,
     step: 50,
     expiry: "2026-08-27",
@@ -1630,10 +1632,38 @@ test("first candle ATM+2 and ATM-2 orders use that strike, not ATM", () => {
     adapter: minusBook.adapter,
   });
   assert.equal(minusTick.action, "entry");
-  assert.equal(minusBook.places[0].strike, 22600);
+  assert.equal(minusBook.places[0].strike, 22800);
   assert.equal(minusBook.places[0].option, "PE");
-  assert.equal(minusBook.places[0].symbol, "NIFTY 22600 PE");
-  assert.equal(minusBook.places[0].securityId, "pe-22600");
+  assert.equal(minusBook.places[0].symbol, "NIFTY 22800 PE");
+  assert.equal(minusBook.places[0].securityId, "pe-22800");
+});
+
+test("nifty ATM+2 entry buys CE above ATM and PE below ATM", () => {
+  const pe = defaultNiftyFirstCandleAlgo({ name: "First candle plus two PE", strikeOffset: 2 });
+  const peBook = bookAdapter();
+  const peTick = NiftyVwapStrategy.tick({
+    algo: pe,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(22720, 22680)],
+    ceBars: [firstBar(96, 70)],
+    peBars: [firstBar(80, 110)],
+    ceLtp: 70,
+    peLtp: 110,
+    ceSecurityId: "ce-22800",
+    peSecurityId: "pe-22600",
+    spot: 22720,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: peBook.positions,
+    adapter: peBook.adapter,
+  });
+  assert.equal(peTick.action, "entry");
+  assert.equal(peBook.places[0].strike, 22600);
+  assert.equal(peBook.places[0].option, "PE");
+  assert.equal(peBook.places[0].symbol, "NIFTY 22600 PE");
+  assert.equal(peBook.places[0].securityId, "pe-22600");
 });
 
 test("crude ATM+2 entry buys CE above ATM and PE below ATM", () => {

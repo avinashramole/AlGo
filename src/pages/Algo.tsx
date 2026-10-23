@@ -369,7 +369,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "multi-index-reversal" as const,
       category: `MULTI-INDEX ${script.label} ${script.exchange} ${String(algo.timeframe || "15m").toUpperCase()}`,
-      config: `${script.label} ${script.exchange} · ${algo.timeframe || "15m"} · ${offset ? `ATM${offset > 0 ? `+${offset}` : offset}` : "ATM"} · last completed candle · skip doji · skip wick > body · TGT ${algo.initialTargetPct || 40}% · reverse −${algo.reversalLossPct || 20}% ×${algo.reversalQtyMultiple || 2} · combined +${algo.combinedTargetPct || 20}% ${algo.combinedTargetBasis === "combined" ? "combined premium" : "original premium"} · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live" : "Paper"}`,
+      config: `${script.label} ${script.exchange} · ${algo.timeframe || "15m"} · ${offset ? `ATM${offset > 0 ? `+${offset}` : offset} · CE + / PE −` : "ATM"} · last completed candle · skip doji · skip wick > body · TGT ${algo.initialTargetPct || 40}% · reverse −${algo.reversalLossPct || 20}% ×${algo.reversalQtyMultiple || 2} · combined +${algo.combinedTargetPct || 20}% ${algo.combinedTargetBasis === "combined" ? "combined premium" : "original premium"} · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live" : "Paper"}`,
     };
   }
   if (isNiftyTest1Kind(algo)) {
@@ -404,7 +404,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-first-candle" as const,
       category: `SYSTEMATIC NIFTY FIRST ${tf.toUpperCase()}`,
-      config: `NIFTY FUT · ${tf} · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · last completed candle · skip doji · skip wick > body · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
+      config: `NIFTY FUT · ${tf} · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset} · CE + / PE −` : "ATM"} · last completed candle · skip doji · skip wick > body · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {
