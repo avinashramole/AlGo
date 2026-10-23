@@ -19,8 +19,6 @@ export function Options() {
   const underlyings = meta?.underlyings?.length ? meta.underlyings : OPTION_UNDERLYINGS;
   const rows = capStrikeWindow(data.optionChain || []);
   const [lots, setLots] = useState(1);
-  const [orderType, setOrderType] = useState<"MARKET" | "LIMIT">("MARKET");
-  const [limitPrice, setLimitPrice] = useState("");
   const [mapOpen, setMapOpen] = useState(false);
   const atm = rows.find((row) => row.atm);
   const spot = meta?.spot || data.indices[0]?.price || 0;
@@ -73,34 +71,6 @@ export function Options() {
                 {isCrude ? ` · size ${lotSize}` : ""}
               </span>
             </label>
-            <div className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-1 py-1">
-              {(["MARKET", "LIMIT"] as const).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  data-option-order-type={type}
-                  onClick={() => setOrderType(type)}
-                  className={cn(
-                    "h-7 rounded-md px-2 text-xs font-bold",
-                    orderType === type ? "bg-brand-500 text-white" : "text-slate-500",
-                  )}
-                >
-                  {type === "MARKET" ? "Market" : "Limit"}
-                </button>
-              ))}
-              {orderType === "LIMIT" ? (
-                <input
-                  data-option-limit-price="true"
-                  className="h-7 w-16 rounded border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-bold"
-                  type="number"
-                  min={0.05}
-                  step={0.05}
-                  placeholder="Price"
-                  value={limitPrice}
-                  onChange={(event) => setLimitPrice(event.target.value)}
-                />
-              ) : null}
-            </div>
           </div>
         </div>
         <TickerStrip selectedId={meta?.symbol} onSelect={(chainId) => void selectChain(chainId)} />
@@ -113,7 +83,7 @@ export function Options() {
           {data.dhanFeed?.live ? (
             sessionOpen ? (
             <>
-              Market or Limit BUY/SELL goes to Dhan
+              BUY/SELL on a strike opens Market or Limit at that strike’s price. Orders go to Dhan
               {mapScope === "master"
                 ? " on the admin broker only."
                 : mapScope === "clients"
@@ -151,7 +121,7 @@ export function Options() {
           )}
         </div>
       </div>
-      <OptionIdsTape lots={lots} orderType={orderType} limitPrice={limitPrice} />
+      <OptionIdsTape lots={lots} />
       {mapOpen ? (
         <MapClientsModal
           mappingScope={mapScope}

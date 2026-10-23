@@ -1,9 +1,28 @@
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
 import { capStrikeWindow } from "../deskFeed";
 import { colors, formatNumber, formatPct, hasDhanQuotes, vwapColor } from "../theme";
+
+type ChainRow = {
+  strike: number;
+  atm?: boolean;
+  callLtp: number;
+  putLtp: number;
+  callVwap?: number;
+  putVwap?: number;
+  callChg: number;
+  putChg: number;
+  callId?: number | string;
+  putId?: number | string;
+};
+
+type Ticket = {
+  option: "CE" | "PE";
+  side: "BUY" | "SELL";
+  row: ChainRow;
+};
 
 function optionTickPrice(value: unknown) {
   const n = Number(value);
@@ -11,10 +30,16 @@ function optionTickPrice(value: unknown) {
   return Math.round(n * 20) / 20;
 }
 
+function strikeLtp(row: ChainRow, option: "CE" | "PE") {
+  return option === "CE" ? row.callLtp : row.putLtp;
+}
+
 export function OptionsScreen() {
   const { data, selectChain, order } = useMarket();
-  const [orderType, setOrderType] = useState<"MARKET" | "LIMIT">("MARKET");
-  const [limitPrice, setLimitPrice] = useState("");
+  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [ticketType, setTicketType] = useState<"MARKET" | "LIMIT">("LIMIT");
+  const [ticketPrice, setTicketPrice] = useState("");
+  const [ticketLots, setTicketLots] = useState(1);
   const meta = data.optionMeta;
   const underlyings = meta?.underlyings || [
     { id: "NIFTY", label: "NIFTY", lot: 65 },
@@ -29,12 +54,27 @@ export function OptionsScreen() {
       row.front && (!meta?.symbol || row.root === meta.symbol || row.symbol.startsWith(meta.symbol)),
   );
   const chainRows = capStrikeWindow(data.optionChain || []);
+  const liveRow = ticket ? chainRows.find((row) => row.strike === ticket.row.strike) || ticket.row : null;
+  const liveLtp = ticket && liveRow ? strikeLtp(liveRow, ticket.option) : 0;
+  const placeLots = Math.max(1, ticketLots);
+  const qty = placeLots * lot;
 
-  const trade = async (option: "CE" | "PE", action: "BUY" | "SELL", row: (typeof data.optionChain)[number]) => {
+  const openTicket = (option: "CE" | "PE", side: "BUY" | "SELL", row: ChainRow) => {
+    const tick = optionTickPrice(strikeLtp(row, option));
+    setTicket({ option, side, row });
+    setTicketType("LIMIT");
+    setTicketPrice(tick > 0 ? String(tick) : "");
+    setTicketLots(1);
+  };
+
+  const trade = async () => {
+    if (!ticket) return;
+    const { option, side } = ticket;
+    const row = liveRow || ticket.row;
     const symbol = `${meta?.symbol || "NIFTY"} ${row.strike} ${option}`;
-    const ltp = option === "CE" ? row.callLtp : row.putLtp;
-    const useLimit = orderType === "LIMIT";
-    const limit = optionTickPrice(limitPrice) || optionTickPrice(ltp);
+    const ltp = strikeLtp(row, option);
+    const useLimit = ticketType === "LIMIT";
+    const limit = optionTickPrice(ticketPrice) || optionTickPrice(ltp);
     if (useLimit && !(limit > 0)) {
       Alert.alert("Enter a Limit price", "Type a Limit price, or wait for LTP on this strike.");
       return;
@@ -42,9 +82,9 @@ export function OptionsScreen() {
     try {
       const result = await order({
         symbol,
-        side: action,
-        qty: lot,
-        lots: 1,
+        side,
+        qty,
+        lots: placeLots,
         lotSize: lot,
         price: useLimit ? limit : ltp,
         product: "MIS",
@@ -62,10 +102,11 @@ export function OptionsScreen() {
         securityId: option === "CE" ? row.callId : row.putId,
       });
       const priceNote = useLimit ? `LIMIT @ ${limit}` : "MARKET";
+      setTicket(null);
       if (result.live) {
-        Alert.alert("Sent to Dhan", `${action} ${symbol} · ${lot} qty · ${priceNote}`);
+        Alert.alert("Sent to Dhan", `${side} ${symbol} · ${placeLots} lot · ${priceNote}`);
       } else {
-        Alert.alert("Desk fill only", result.warning || `${action} ${symbol} · ${lot} qty · ${priceNote}. Connect live Access Token on Brokers to send this to Dhan.`);
+        Alert.alert("Desk fill only", result.warning || `${side} ${symbol} · ${placeLots} lot · ${priceNote}. Connect live Access Token on Brokers to send this to Dhan.`);
       }
     } catch (err) {
       Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
@@ -104,30 +145,9 @@ export function OptionsScreen() {
         {hasDhanQuotes(data) ? "Last Dhan quotes stay after NSE and MCX close. Orders go to Dhan when LIVE." : "Desk fill only until Access Token on Brokers"}
         {" · ATM ±5"}
         {String(meta?.symbol || "").toUpperCase().includes("CRUDEOIL") ? " · 1 lot = Dhan qty 1 (size 100)" : ` · 1 lot = ${lot}`}
+        {"\n"}
+        Tap BUY or SELL on a strike to set Market or Limit at that strike LTP.
       </Text>
-      <View style={styles.chips}>
-        {(["MARKET", "LIMIT"] as const).map((type) => (
-          <Pressable
-            key={type}
-            onPress={() => setOrderType(type)}
-            style={[styles.chip, orderType === type && styles.chipOn]}
-          >
-            <Text style={[styles.chipText, orderType === type && styles.chipTextOn]}>
-              {type === "MARKET" ? "Market" : "Limit"}
-            </Text>
-          </Pressable>
-        ))}
-        {orderType === "LIMIT" ? (
-          <TextInput
-            value={limitPrice}
-            onChangeText={setLimitPrice}
-            keyboardType="decimal-pad"
-            placeholder="Limit price"
-            placeholderTextColor={colors.muted}
-            style={styles.priceInput}
-          />
-        ) : null}
-      </View>
       <View style={styles.chips}>
         {underlyings.map((item) => (
           <Pressable
@@ -187,14 +207,14 @@ export function OptionsScreen() {
             <View style={{ flex: 1, paddingRight: 8 }}>
               <Text style={styles.muted}>CALL</Text>
               <View style={styles.actions}>
-                <Pressable style={styles.buy} onPress={() => void trade("CE", "BUY", row)}>
+                <Pressable style={styles.buy} onPress={() => openTicket("CE", "BUY", row)}>
                   <Text style={styles.actionText}>BUY</Text>
                 </Pressable>
                 <Text style={[styles.vwap, { color: vwapColor(row.callVwap || row.callLtp, row.callLtp) }]}>
                   {formatNumber(row.callVwap || row.callLtp)}
                 </Text>
                 <Text style={styles.price}>{formatNumber(row.callLtp)}</Text>
-                <Pressable style={styles.sell} onPress={() => void trade("CE", "SELL", row)}>
+                <Pressable style={styles.sell} onPress={() => openTicket("CE", "SELL", row)}>
                   <Text style={styles.actionText}>SELL</Text>
                 </Pressable>
               </View>
@@ -203,14 +223,14 @@ export function OptionsScreen() {
             <View style={{ flex: 1, alignItems: "flex-end" }}>
               <Text style={styles.muted}>PUT</Text>
               <View style={styles.actions}>
-                <Pressable style={styles.buy} onPress={() => void trade("PE", "BUY", row)}>
+                <Pressable style={styles.buy} onPress={() => openTicket("PE", "BUY", row)}>
                   <Text style={styles.actionText}>BUY</Text>
                 </Pressable>
                 <Text style={[styles.vwap, { color: vwapColor(row.putVwap || row.putLtp, row.putLtp) }]}>
                   {formatNumber(row.putVwap || row.putLtp)}
                 </Text>
                 <Text style={styles.price}>{formatNumber(row.putLtp)}</Text>
-                <Pressable style={styles.sell} onPress={() => void trade("PE", "SELL", row)}>
+                <Pressable style={styles.sell} onPress={() => openTicket("PE", "SELL", row)}>
                   <Text style={styles.actionText}>SELL</Text>
                 </Pressable>
               </View>
@@ -220,6 +240,67 @@ export function OptionsScreen() {
         </Card>
       ))}
       </ScrollView>
+      <Modal visible={Boolean(ticket)} transparent animationType="fade" onRequestClose={() => setTicket(null)}>
+        <View style={styles.ticketScrim}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setTicket(null)} />
+          {ticket ? (
+            <View style={styles.ticket}>
+              <Text style={[styles.ticketTitle, { color: ticket.side === "BUY" ? colors.up : colors.down }]}>
+                {ticket.side} {meta?.symbol || "NIFTY"} {ticket.row.strike} {ticket.option}
+              </Text>
+              <Text style={styles.muted}>
+                LTP {formatNumber(liveLtp)}
+                {ticket.row.atm ? " · ATM" : ""} · {ticketType === "LIMIT" ? "Limit at this strike" : "Market at this strike"}
+              </Text>
+              <View style={styles.chips}>
+                {(["MARKET", "LIMIT"] as const).map((type) => (
+                  <Pressable
+                    key={type}
+                    onPress={() => {
+                      setTicketType(type);
+                      if (type === "LIMIT" && !optionTickPrice(ticketPrice)) {
+                        const tick = optionTickPrice(liveLtp);
+                        setTicketPrice(tick > 0 ? String(tick) : "");
+                      }
+                    }}
+                    style={[styles.chip, ticketType === type && styles.chipOn]}
+                  >
+                    <Text style={[styles.chipText, ticketType === type && styles.chipTextOn]}>
+                      {type === "MARKET" ? "Market" : "Limit"}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {ticketType === "LIMIT" ? (
+                <TextInput
+                  value={ticketPrice}
+                  onChangeText={setTicketPrice}
+                  keyboardType="decimal-pad"
+                  placeholder="Limit price"
+                  placeholderTextColor={colors.muted}
+                  style={styles.priceInput}
+                />
+              ) : null}
+              <TextInput
+                value={String(ticketLots)}
+                onChangeText={(value) => setTicketLots(Math.max(1, Number(value) || 1))}
+                keyboardType="number-pad"
+                placeholder="Lots"
+                placeholderTextColor={colors.muted}
+                style={styles.priceInput}
+              />
+              <View style={styles.ticketActions}>
+                <Pressable style={styles.cancel} onPress={() => setTicket(null)}>
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable style={[styles.place, ticket.side === "BUY" ? styles.buy : styles.sell]} onPress={() => void trade()}>
+                  <Text style={styles.actionText}>Place {ticket.side}</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -255,6 +336,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 12,
     color: colors.text || "#0f172a",
+    marginBottom: 8,
   },
   strike: { fontWeight: "800", marginBottom: 8 },
   row: { flexDirection: "row", justifyContent: "space-between" },
@@ -264,4 +346,27 @@ const styles = StyleSheet.create({
   buy: { backgroundColor: colors.up, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   sell: { backgroundColor: colors.down, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   actionText: { color: "#fff", fontWeight: "800", fontSize: 11 },
+  ticketScrim: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(7, 24, 51, 0.48)",
+    padding: 12,
+  },
+  ticket: {
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    padding: 16,
+  },
+  ticketTitle: { fontSize: 16, fontWeight: "800" },
+  ticketActions: { flexDirection: "row", gap: 8, marginTop: 4 },
+  cancel: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  cancelText: { fontWeight: "700" },
+  place: { flex: 1, borderRadius: 8, paddingVertical: 10, alignItems: "center" },
 });
