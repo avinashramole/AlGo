@@ -4,7 +4,7 @@ import { isFreshTradeLogRow, lastBookClearAt, msUntilBookClear, tradeLogRowMs } 
 import { clearPreviousIntradayStrategyBook, clearStrategyOrdersOnMemberDesks, dropMappedStrategyForUser, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
 import { ADMIN_ARCHIVE_ID, archiveTrades } from "./tradeArchive.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
-import { dispatchMemberCopies, dispatchMemberExitCopies, findLiveCopyAlgo, memberCopyPayloads } from "./liveCopy.js";
+import { dispatchMemberCopies, dispatchMemberExitCopies, findLiveCopyAlgo, listLiveCopyTargets, memberCopyPayloads } from "./liveCopy.js";
 import { applyBrokerBookToReport, overlayLiveUnrealized, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 import {
   UNDERLYINGS,
@@ -102,6 +102,7 @@ import {
   ShivamT2sStrategy,
   shivamT2sConfig,
   shivamState,
+  resetShivamSession,
   validateShivamT2s,
 } from "./shivamT2s/index.js";
 import { buildShivamReport, renderShivamExcel, renderShivamPdf } from "./shivamT2s/reports.js";
@@ -857,6 +858,15 @@ function skipAdminBrokerOrder(algo = {}, payload = {}) {
   if (payload?.forceLiveBroker === true) return false;
   if (!clientsOnlyAlgo(algo)) return false;
   if (liveOrderSide(payload) === "SELL" && adminHasOpenOptionLot(algo, payload)) return false;
+  const targets = listLiveCopyTargets({
+    strategyName: algo.name || payload?.strategy,
+    strategyId: algo.id || payload?.strategyId,
+    masterQty: payload?.qty || 1,
+    lotSize: payload?.lotSize || payload?.qty || 1,
+    mappedClientIds: algo.mappedClientIds,
+    mappingScope: algo.mappingScope,
+  });
+  if (!targets.length) return false;
   return true;
 }
 
@@ -970,7 +980,7 @@ function holdOpenBrokerLot(algo) {
 
 export function releaseStaleLiveSend(algo, now = Date.now()) {
   if (!algo) return false;
-  const vs = algo.vwapState || algo.test1State;
+  const vs = algo.vwapState || algo.test1State || algo.shivamState;
   if (!vs) return false;
   const locked = String(vs.buyPhase || "") === "entry" || vs.inFlight;
   if (!locked) return false;
@@ -2439,6 +2449,10 @@ function dropPreviousIntradayBook(algo, today = VwapSignalEngine.sessionKeyIST(D
 
 function beginStrategyRecord(algo) {
   if (algo) algo.allowFreshLiveEntry = true;
+  if (isShivamT2sAlgo(algo)) {
+    const vs = shivamState(algo);
+    resetShivamSession(vs, vs.sessionDate || "");
+  }
   if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo) || isNiftyTest1Algo(algo) || isNiftyTest2Algo(algo)) {
     const vs = runtimeState(algo);
     PositionManager.clearOpen(vs);
@@ -2551,6 +2565,7 @@ function instrumentLotSize(root, strike, fallback = 0) {
 
 function tickShivamT2sAlgo(algo, mode, feedLive) {
   const now = Date.now();
+  if (mode === "live") releaseStaleLiveSend(algo, now);
   const config = shivamT2sConfig(algo);
   const root = config.symbol;
   const mcx = config.session === "mcx" || isMcxSymbol(root);

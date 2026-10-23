@@ -297,26 +297,34 @@ export const ShivamT2sStrategy = {
       return markNoTrade(algo, state, "invalid-qty", signal);
     }
 
-    const result = input.adapter?.place?.({
-      symbol: details.symbol,
-      side: "BUY",
-      qty,
-      lots: sized.approvedLots,
-      lotSize: sized.lotSize,
-      price: premium,
-      kind: "option",
-      option,
-      strike,
-      expiry: details.expiry,
-      securityId: details.securityId,
-      product: "MIS",
-      type: "MARKET",
-      strategy: name,
-      strategyId: algo.id,
-      barTime,
-      role: "shivam-entry",
-      exchangeSegment: config.segment,
-    });
+    let result;
+    try {
+      result = input.adapter?.place?.({
+        symbol: details.symbol,
+        side: "BUY",
+        qty,
+        lots: sized.approvedLots,
+        lotSize: sized.lotSize,
+        price: premium,
+        kind: "option",
+        option,
+        strike,
+        expiry: details.expiry,
+        securityId: details.securityId,
+        product: "MIS",
+        type: "MARKET",
+        strategy: name,
+        strategyId: algo.id,
+        barTime,
+        role: "shivam-entry",
+        exchangeSegment: config.segment,
+      });
+    } catch (err) {
+      state.inFlight = false;
+      state.sessionTrades = Math.max(0, Number(state.sessionTrades) - 1);
+      noteShivamEvent(state, "rejected", { error: err?.message || "rejected" });
+      return markNoTrade(algo, state, "rejected", signal);
+    }
     const status = String(result?.status || "").toUpperCase();
     const notQueued = result?.queued === false && result?.duplicate !== true;
     const rejected =

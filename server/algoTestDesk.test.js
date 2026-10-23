@@ -26,6 +26,7 @@ const {
   setDhanFeed,
   toggleAlgo,
   updateAlgo,
+  withLiveAlgo,
 } = await import("./market.js");
 const { installMemberBroker, saveClientSettings, selectMemberBroker } = await import("./memberDesk.js");
 
@@ -460,6 +461,121 @@ test("Algo Test live first-candle queues admin Dhan and mapped user copy", () =>
     assert.equal(copy.qty, 65);
     assert.equal(copy.account?.accessToken, "member-dhan-token");
     assert.notEqual(copy.paper, true);
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
+});
+
+test("Start live on Algo Test Shivam re-arms a stale card and queues admin plus mapped user", () => {
+  setDhanFeed({ live: true });
+  drainPendingLiveAlgoOrders();
+  const user = liveMappedUser("u-shivam-rearm");
+  const created = createAlgo({
+    kind: "shivam-t2s",
+    testDesk: true,
+    runMode: "live",
+    liveAuthorized: true,
+    brokerId: "dhan",
+    mappingScope: "both",
+    mappedClientIds: [user.id],
+    clientVisible: true,
+  });
+  try {
+    withLiveAlgo(created.id, (algo) => {
+      algo.allowFreshLiveEntry = false;
+      algo.shivamState = {
+        ...(algo.shivamState || {}),
+        sessionDate: "2026-10-23",
+        sessionTrades: 5,
+        inFlight: true,
+        lastEntryBarKey: "CE:123",
+        lastError: "in-flight",
+      };
+    });
+    const started = toggleAlgo(created.id, { enabled: true });
+    assert.equal(started.status, "LIVE");
+    assert.equal(started.liveAuthorized, true);
+    assert.equal(started.allowFreshLiveEntry, true);
+    assert.equal(started.shivamState?.inFlight, false);
+    assert.equal(started.shivamState?.lastEntryBarKey, "");
+    assert.equal(started.shivamState?.sessionTrades, 0);
+    const sent = queueLiveAlgoOrder({
+      strategy: created.name,
+      strategyId: created.id,
+      kind: "shivam-t2s",
+      testDesk: true,
+      paper: false,
+      brokerId: "dhan",
+      side: "BUY",
+      symbol: "NIFTY 25000 CE",
+      qty: 65,
+      lots: 1,
+      lotSize: 65,
+      option: "CE",
+      strike: 25000,
+      securityId: "ce-25000",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(sent.queued, true);
+    const queued = drainPendingLiveAlgoOrders();
+    const admin = queued.find((row) => !row.copyUserId && row.strategy === created.name);
+    const copy = queued.find((row) => row.copyUserId === user.id);
+    assert.ok(admin);
+    assert.ok(copy);
+    assert.equal(admin.brokerId, "dhan");
+    assert.notEqual(admin.paper, true);
+    assert.equal(copy.brokerId, "dhan");
+    assert.equal(copy.account?.accessToken, "member-dhan-token");
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
+});
+
+test("Algo Test clients-only with nobody mapped still places the admin live order", () => {
+  setDhanFeed({ live: true });
+  drainPendingLiveAlgoOrders();
+  const created = createAlgo({
+    name: `Algo Test empty clients ${Date.now()}`,
+    kind: "nifty-first-candle",
+    testDesk: true,
+    runMode: "live",
+    brokerId: "dhan",
+    mappingScope: "clients",
+    mappedClientIds: [],
+    clientVisible: true,
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    const sent = queueLiveAlgoOrder({
+      strategy: created.name,
+      strategyId: created.id,
+      kind: "nifty-first-candle",
+      testDesk: true,
+      paper: false,
+      brokerId: "dhan",
+      side: "BUY",
+      symbol: "NIFTY 25000 CE",
+      qty: 65,
+      lots: 1,
+      lotSize: 65,
+      option: "CE",
+      strike: 25000,
+      securityId: "ce-25000",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(sent.queued, true);
+    assert.notEqual(sent.skippedAdmin, true);
+    const queued = drainPendingLiveAlgoOrders();
+    const admin = queued.find((row) => !row.copyUserId && row.strategy === created.name);
+    assert.ok(admin);
+    assert.equal(admin.brokerId, "dhan");
+    assert.equal(queued.some((row) => row.copyUserId), false);
   } finally {
     deleteAlgo(created.id);
     drainPendingLiveAlgoOrders();
