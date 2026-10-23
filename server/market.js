@@ -24,6 +24,8 @@ import {
   upcomingExpiries,
   withExpiryLabels,
   keepStrikeWindow,
+  capStrikeWindow,
+  CHAIN_ATM_WINGS,
 } from "./optionChain.js";
 import { listIndexContracts, optionCount, parseOptionContract, peekOptionSecurityId, publicFutures, publicIndices, publicOptionRows, rememberChainOptionIds } from "./frontFutures.js";
 import { optionBacktestWindow } from "./niftyOptionHistory.js";
@@ -6420,7 +6422,7 @@ export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expi
   const chosen = wanted && expiries.includes(wanted) ? wanted : expiries[0];
   const liveSpot = getChainSpot(meta.id);
   const spot = liveSpot > 0 ? liveSpot : meta.id === "CRUDEOIL" ? 6100 : 24500;
-  const rows = buildSyntheticChain(spot, meta.step, 10);
+  const rows = buildSyntheticChain(spot, meta.step, CHAIN_ATM_WINGS);
   const stats = chainStats(rows, spot);
   state.optionChain = rows;
   state.optionMeta = withExpiryLabels({
@@ -6453,6 +6455,7 @@ export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source, ex
         ? cached.rows
         : [];
   if (sameSymbol && sameExpiry) nextRows = keepStrikeWindow(state.optionChain, nextRows);
+  nextRows = capStrikeWindow(nextRows, CHAIN_ATM_WINGS);
   const nextSpot = Number(spot) || Number(cached?.meta?.spot) || getChainSpot(meta.id);
   const stats = chainStats(nextRows, nextSpot);
   const pinned =
@@ -6476,7 +6479,7 @@ export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source, ex
 
 export function cacheOptionDesk({ symbol, expiry, expiries, rows, spot, source } = {}) {
   const meta = getUnderlying(symbol || "CRUDEOIL");
-  const nextRows = Array.isArray(rows) && rows.length ? rows : [];
+  const nextRows = capStrikeWindow(Array.isArray(rows) && rows.length ? rows : [], CHAIN_ATM_WINGS);
   const nextSpot = Number(spot) || getChainSpot(meta.id);
   const stats = chainStats(nextRows, nextSpot);
   const nextMeta = withExpiryLabels({

@@ -1,3 +1,5 @@
+export const CHAIN_ATM_WINGS = 5;
+
 export const UNDERLYINGS = [
   { id: "NIFTY", label: "NIFTY", indexSymbol: "NIFTY 50", step: 50, scrip: 13, segment: "IDX_I", lot: 65, expiryWeekday: "Tue", weekly: true },
   { id: "BANKNIFTY", label: "BANKNIFTY", indexSymbol: "BANKNIFTY", step: 100, scrip: 25, segment: "IDX_I", lot: 30, expiryWeekday: "Tue", weekly: false },
@@ -515,10 +517,17 @@ export function parseDhanChain(payload, spot, step = 50) {
   return { rows: markAtmRows(rows, last, step), spot: last };
 }
 
-export function trimAroundAtm(rows, wings = 12) {
+export function trimAroundAtm(rows, wings = CHAIN_ATM_WINGS) {
   const atmIndex = rows.findIndex((row) => row.atm);
   if (atmIndex < 0) return rows.slice(0, wings * 2 + 1);
   return rows.slice(Math.max(0, atmIndex - wings), atmIndex + wings + 1);
+}
+
+export function capStrikeWindow(rows, wings = CHAIN_ATM_WINGS) {
+  const list = Array.isArray(rows) ? rows : [];
+  const max = wings * 2 + 1;
+  if (list.length <= max) return list;
+  return trimAroundAtm(list, wings);
 }
 
 export function keepStrikeWindow(previous = [], incoming = []) {

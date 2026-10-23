@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildSyntheticChain, dropExpired, exchangeSegmentFor, markAtmRows, normalizeExpiry, trimAroundAtm } from "./optionChain.js";
+import { buildSyntheticChain, CHAIN_ATM_WINGS, dropExpired, exchangeSegmentFor, markAtmRows, normalizeExpiry, trimAroundAtm } from "./optionChain.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCRIP_FRONT_FILE = process.env.T2S_SCRIP_CACHE || path.join(__dirname, "data", "scrip-front.json");
@@ -639,7 +639,7 @@ export function scripExpiries(symbol) {
   return dropExpired([...new Set(dates)].sort());
 }
 
-export function buildScripChain({ symbol, expiry, spot, step = 50, liveRows = [], wings = 10, liveOnly = true } = {}) {
+export function buildScripChain({ symbol, expiry, spot, step = 50, liveRows = [], wings = CHAIN_ATM_WINGS, liveOnly = true } = {}) {
   const root = optionRoot(symbol);
   const exp = normalizeExpiry(expiry);
   const bucket = cache.byExpiry.get(expiryKey(root, exp));

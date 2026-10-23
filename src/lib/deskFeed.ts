@@ -1,4 +1,6 @@
-type StrikeRow = { strike: number };
+export const CHAIN_ATM_WINGS = 5;
+
+type StrikeRow = { strike: number; atm?: boolean };
 type IdRow = { id: string };
 type BookRow = IdRow & {
   symbol?: string;
@@ -113,19 +115,32 @@ export function keepLastIndexPrices<
   });
 }
 
+export function trimAroundAtm<T extends StrikeRow>(rows: T[] = [], wings = CHAIN_ATM_WINGS): T[] {
+  const list = Array.isArray(rows) ? rows : [];
+  const atmIndex = list.findIndex((row) => row.atm);
+  if (atmIndex < 0) return list.slice(0, wings * 2 + 1);
+  return list.slice(Math.max(0, atmIndex - wings), atmIndex + wings + 1);
+}
+
+export function capStrikeWindow<T extends StrikeRow>(rows: T[] = [], wings = CHAIN_ATM_WINGS): T[] {
+  const list = Array.isArray(rows) ? rows : [];
+  if (list.length <= wings * 2 + 1) return list;
+  return trimAroundAtm(list, wings);
+}
+
 export function keepStrikeWindow<T extends StrikeRow>(previous: T[] = [], incoming: T[] = []): T[] {
   const prev = Array.isArray(previous) ? previous : [];
   const next = Array.isArray(incoming) ? incoming : [];
-  if (!prev.length) return next;
-  if (!next.length) return prev;
+  if (!prev.length) return capStrikeWindow(next);
+  if (!next.length) return capStrikeWindow(prev);
   const byStrike = new Map(next.map((row) => [Number(row.strike), row]));
   const patched: T[] = [];
   for (const row of prev) {
     const fresh = byStrike.get(Number(row.strike));
     if (fresh) patched.push({ ...row, ...fresh });
   }
-  if (patched.length >= Math.min(11, prev.length)) return patched;
-  return next;
+  if (patched.length >= Math.min(CHAIN_ATM_WINGS * 2 + 1, prev.length)) return capStrikeWindow(patched);
+  return capStrikeWindow(next);
 }
 
 export function keepLastBookRows<T extends IdRow>(previous: T[] = [], incoming: T[] = []): T[] {

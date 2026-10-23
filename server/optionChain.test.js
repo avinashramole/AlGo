@@ -18,6 +18,9 @@ import {
   chooseDeskExpiry,
   dropExpired,
   withExpiryLabels,
+  trimAroundAtm,
+  capStrikeWindow,
+  CHAIN_ATM_WINGS,
 } from "./optionChain.js";
 
 test("chooseDeskExpiry defaults to the nearest expiry and keeps a picked date", () => {
@@ -134,6 +137,22 @@ test("Dhan Crude product aliases and a just-sent SELL collapse to one open lot",
   assert.equal(open.length, 1);
   assert.equal(open[0].netQty, 1);
   assert.equal(dhanPositionBookId(open[0]), "dhan-pos-99-INTRADAY");
+});
+
+test("desk option chain keeps ATM ±5 only", () => {
+  assert.equal(CHAIN_ATM_WINGS, 5);
+  const rows = Array.from({ length: 21 }, (_, i) => ({
+    strike: 24000 + i * 50,
+    atm: i === 10,
+  }));
+  const next = trimAroundAtm(rows);
+  assert.equal(next.length, 11);
+  assert.equal(next[0].strike, 24250);
+  assert.equal(next[5].atm, true);
+  assert.equal(next[10].strike, 24750);
+  const capped = capStrikeWindow(rows);
+  assert.equal(capped.length, 11);
+  assert.deepEqual(capStrikeWindow(next).map((row) => row.strike), next.map((row) => row.strike));
 });
 
 test("keepStrikeWindow patches LTP on the same strikes instead of recentering ATM", () => {

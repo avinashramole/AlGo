@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct, vwapTone } from "../../lib/format";
+import { capStrikeWindow } from "../../lib/deskFeed";
 import { exchangeSegmentFor, isCrudeUnderlying } from "../../lib/markets";
 
 function optionTickPrice(value: unknown) {
@@ -22,7 +23,7 @@ export function OptionIdsTape({
   const meta = data.optionMeta;
   const symbol = meta?.symbol || "NIFTY";
   const expiries = (meta?.expiries || []).slice(0, 4);
-  const rows = data.optionChain || [];
+  const rows = capStrikeWindow(data.optionChain || []);
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
   const [noteFail, setNoteFail] = useState(false);
@@ -85,7 +86,7 @@ export function OptionIdsTape({
         <div>
           <div className="text-sm font-bold">Options · next 4 expiries</div>
           <p className="text-xs text-slate-400">
-            ATM ±10. Market or Limit BUY/SELL on each strike. Empty Limit price uses that strike LTP. VWAP colour is the same as desktop.
+            ATM ±5. Market or Limit BUY/SELL on each strike. Empty Limit price uses that strike LTP. VWAP colour is the same as desktop.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

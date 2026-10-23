@@ -8,6 +8,7 @@ import { useMarket } from "../context/MarketContext";
 import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { catchDeskError } from "../lib/liveSite";
 import { cn, dhanFeedLabel, formatNumber, formatQuote, hasDhanQuotes, isMcxSessionOpen, isNseSessionOpen } from "../lib/format";
+import { capStrikeWindow } from "../lib/deskFeed";
 import { isCrudeUnderlying, isMcxUnderlying, OPTION_UNDERLYINGS } from "../lib/markets";
 
 type MappingScope = "master" | "clients" | "both";
@@ -16,7 +17,7 @@ export function Options() {
   const { data, selectChain, refresh } = useMarket();
   const meta = data.optionMeta;
   const underlyings = meta?.underlyings?.length ? meta.underlyings : OPTION_UNDERLYINGS;
-  const rows = data.optionChain || [];
+  const rows = capStrikeWindow(data.optionChain || []);
   const [lots, setLots] = useState(1);
   const [orderType, setOrderType] = useState<"MARKET" | "LIMIT">("MARKET");
   const [limitPrice, setLimitPrice] = useState("");
@@ -43,7 +44,7 @@ export function Options() {
             <h1 className="text-xl font-bold">Option Chain</h1>
             <p className="text-sm text-slate-400">
               {meta?.symbol || "NIFTY"} · Expiry {expiryLabel} · Spot {formatQuote(spot)} · ATM{" "}
-              {atm ? formatNumber(atm.strike, 0) : "—"} · PCR {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"} · ATM ±10 ·{" "}
+              {atm ? formatNumber(atm.strike, 0) : "—"} · PCR {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"} · ATM ±5 ·{" "}
               {sourceLabel}
             </p>
           </div>

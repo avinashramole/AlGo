@@ -64,6 +64,9 @@ test("Market tape shows Option Chain lots and hides the extra chip row", () => {
   assert.match(options, /setOrderType/);
   assert.match(options, /limitPrice/);
   assert.match(options, /<OptionIdsTape lots=\{lots\} orderType=\{orderType\} limitPrice=\{limitPrice\} \/>/);
+  assert.match(options, /ATM ±5/);
+  assert.doesNotMatch(options, /ATM ±10/);
+  assert.match(options, /capStrikeWindow/);
   const optionTape = fs.readFileSync(path.join(root, "src/components/dashboard/OptionIdsTape.tsx"), "utf8");
   assert.match(optionTape, /function optionTickPrice/);
   assert.match(optionTape, /Math\.round\(n \* 20\) \/ 20/);
@@ -71,9 +74,15 @@ test("Market tape shows Option Chain lots and hides the extra chip row", () => {
   assert.match(optionTape, /Enter a Limit price/);
   assert.match(optionTape, /LIMIT @ \$\{limit\}/);
   assert.doesNotMatch(optionTape, /type: "MARKET"/);
+  assert.match(optionTape, /ATM ±5/);
+  assert.doesNotMatch(optionTape, /ATM ±10/);
+  assert.match(optionTape, /capStrikeWindow/);
   const mobile = fs.readFileSync(path.join(root, "mobile/src/screens/OptionsScreen.tsx"), "utf8");
   assert.match(mobile, /type: useLimit \? "LIMIT" : "MARKET"/);
   assert.match(mobile, /Limit price/);
+  assert.match(mobile, /ATM ±5/);
+  assert.doesNotMatch(mobile, /ATM ±10/);
+  assert.match(mobile, /capStrikeWindow/);
   const client = fs.readFileSync(path.join(root, "src/api/client.ts"), "utf8");
   assert.match(client, /export function saveOptionChainMap/);
   assert.match(client, /optionChainMap\?:/);

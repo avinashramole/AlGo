@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
+import { capStrikeWindow } from "../deskFeed";
 import { colors, formatNumber, formatPct, hasDhanQuotes, vwapColor } from "../theme";
 
 function optionTickPrice(value: unknown) {
@@ -27,7 +28,7 @@ export function OptionsScreen() {
     (row) =>
       row.front && (!meta?.symbol || row.root === meta.symbol || row.symbol.startsWith(meta.symbol)),
   );
-  const chainRows = data.optionChain || [];
+  const chainRows = capStrikeWindow(data.optionChain || []);
 
   const trade = async (option: "CE" | "PE", action: "BUY" | "SELL", row: (typeof data.optionChain)[number]) => {
     const symbol = `${meta?.symbol || "NIFTY"} ${row.strike} ${option}`;
@@ -101,7 +102,7 @@ export function OptionsScreen() {
         {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"}
         {"\n"}
         {hasDhanQuotes(data) ? "Last Dhan quotes stay after NSE and MCX close. Orders go to Dhan when LIVE." : "Desk fill only until Access Token on Brokers"}
-        {" · ATM ±10"}
+        {" · ATM ±5"}
         {String(meta?.symbol || "").toUpperCase().includes("CRUDEOIL") ? " · 1 lot = Dhan qty 1 (size 100)" : ` · 1 lot = ${lot}`}
       </Text>
       <View style={styles.chips}>
