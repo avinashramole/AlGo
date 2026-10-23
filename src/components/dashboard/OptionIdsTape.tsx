@@ -3,7 +3,21 @@ import { useMarket } from "../../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct, vwapTone } from "../../lib/format";
 import { exchangeSegmentFor, isCrudeUnderlying } from "../../lib/markets";
 
-export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
+function optionTickPrice(value: unknown) {
+  const n = Number(value);
+  if (!(Number.isFinite(n) && n > 0)) return 0;
+  return Math.round(n * 20) / 20;
+}
+
+export function OptionIdsTape({
+  lots = 1,
+  orderType = "MARKET",
+  limitPrice = "",
+}: {
+  lots?: number;
+  orderType?: "MARKET" | "LIMIT";
+  limitPrice?: string;
+}) {
   const { data, selectChain, order } = useMarket();
   const meta = data.optionMeta;
   const symbol = meta?.symbol || "NIFTY";
@@ -17,12 +31,21 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   const crude = isCrudeUnderlying(symbol);
   const qty = Math.max(1, lots) * lot;
   const dhanQty = crude ? Math.max(1, lots) : qty;
+  const useLimit = orderType === "LIMIT";
 
   const trade = async (option: "CE" | "PE", side: "BUY" | "SELL", row: (typeof rows)[number]) => {
     const key = `${row.strike}-${option}-${side}`;
+    const ltp = option === "CE" ? row.callLtp : row.putLtp;
+    const limit = optionTickPrice(limitPrice) || optionTickPrice(ltp);
     setBusy(key);
     setNote("");
     setNoteFail(false);
+    if (useLimit && !(limit > 0)) {
+      setNoteFail(true);
+      setNote("Enter a Limit price");
+      setBusy("");
+      return;
+    }
     try {
       const result = await order({
         symbol: `${symbol} ${row.strike} ${option}`,
@@ -30,9 +53,9 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         qty,
         lots: Math.max(1, lots),
         lotSize: lot,
-        price: option === "CE" ? row.callLtp : row.putLtp,
+        price: useLimit ? limit : ltp,
         product: "MIS",
-        type: "MARKET",
+        type: useLimit ? "LIMIT" : "MARKET",
         brokerId: data.dhanFeed?.live ? "dhan" : data.activeBrokerId,
         kind: "option",
         option,
@@ -41,10 +64,11 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         exchangeSegment: exchangeSegmentFor(symbol),
         securityId: option === "CE" ? row.callId : row.putId,
       });
+      const priceNote = useLimit ? `LIMIT @ ${limit}` : "MARKET";
       setNote(
         result.live
-          ? `${result.afterMarketOrder ? "Queued at Dhan for next open (AMO)" : "Sent to Dhan"} · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot · Dhan qty ${dhanQty}${crude ? ` (size ${lot})` : ""}`
-          : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot · Dhan qty ${dhanQty}${crude ? ` (size ${lot})` : ""}`,
+          ? `${result.afterMarketOrder ? "Queued at Dhan for next open (AMO)" : "Sent to Dhan"} · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot · ${priceNote} · Dhan qty ${dhanQty}${crude ? ` (size ${lot})` : ""}`
+          : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot · ${priceNote} · Dhan qty ${dhanQty}${crude ? ` (size ${lot})` : ""}`,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Order failed";
@@ -61,7 +85,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         <div>
           <div className="text-sm font-bold">Options · next 4 expiries</div>
           <p className="text-xs text-slate-400">
-            ATM ±10. Phone shows LTP, VWAP, and BUY/SELL on each strike. VWAP colour is the same as desktop.
+            ATM ±10. Market or Limit BUY/SELL on each strike. Empty Limit price uses that strike LTP. VWAP colour is the same as desktop.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

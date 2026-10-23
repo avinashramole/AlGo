@@ -1,10 +1,19 @@
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
 import { colors, formatNumber, formatPct, hasDhanQuotes, vwapColor } from "../theme";
 
+function optionTickPrice(value: unknown) {
+  const n = Number(value);
+  if (!(Number.isFinite(n) && n > 0)) return 0;
+  return Math.round(n * 20) / 20;
+}
+
 export function OptionsScreen() {
   const { data, selectChain, order } = useMarket();
+  const [orderType, setOrderType] = useState<"MARKET" | "LIMIT">("MARKET");
+  const [limitPrice, setLimitPrice] = useState("");
   const meta = data.optionMeta;
   const underlyings = meta?.underlyings || [
     { id: "NIFTY", label: "NIFTY", lot: 65 },
@@ -23,6 +32,12 @@ export function OptionsScreen() {
   const trade = async (option: "CE" | "PE", action: "BUY" | "SELL", row: (typeof data.optionChain)[number]) => {
     const symbol = `${meta?.symbol || "NIFTY"} ${row.strike} ${option}`;
     const ltp = option === "CE" ? row.callLtp : row.putLtp;
+    const useLimit = orderType === "LIMIT";
+    const limit = optionTickPrice(limitPrice) || optionTickPrice(ltp);
+    if (useLimit && !(limit > 0)) {
+      Alert.alert("Enter a Limit price", "Type a Limit price, or wait for LTP on this strike.");
+      return;
+    }
     try {
       const result = await order({
         symbol,
@@ -30,9 +45,9 @@ export function OptionsScreen() {
         qty: lot,
         lots: 1,
         lotSize: lot,
-        price: ltp,
+        price: useLimit ? limit : ltp,
         product: "MIS",
-        type: "MARKET",
+        type: useLimit ? "LIMIT" : "MARKET",
         brokerId: data.dhanFeed?.live ? "dhan" : data.activeBrokerId,
         kind: "option",
         option,
@@ -45,10 +60,11 @@ export function OptionsScreen() {
             : "NSE_FNO",
         securityId: option === "CE" ? row.callId : row.putId,
       });
+      const priceNote = useLimit ? `LIMIT @ ${limit}` : "MARKET";
       if (result.live) {
-        Alert.alert("Sent to Dhan", `${action} ${symbol} · ${lot} qty`);
+        Alert.alert("Sent to Dhan", `${action} ${symbol} · ${lot} qty · ${priceNote}`);
       } else {
-        Alert.alert("Desk fill only", result.warning || `${action} ${symbol} · ${lot} qty. Connect live Access Token on Brokers to send this to Dhan.`);
+        Alert.alert("Desk fill only", result.warning || `${action} ${symbol} · ${lot} qty · ${priceNote}. Connect live Access Token on Brokers to send this to Dhan.`);
       }
     } catch (err) {
       Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
@@ -88,6 +104,29 @@ export function OptionsScreen() {
         {" · ATM ±10"}
         {String(meta?.symbol || "").toUpperCase().includes("CRUDEOIL") ? " · 1 lot = Dhan qty 1 (size 100)" : ` · 1 lot = ${lot}`}
       </Text>
+      <View style={styles.chips}>
+        {(["MARKET", "LIMIT"] as const).map((type) => (
+          <Pressable
+            key={type}
+            onPress={() => setOrderType(type)}
+            style={[styles.chip, orderType === type && styles.chipOn]}
+          >
+            <Text style={[styles.chipText, orderType === type && styles.chipTextOn]}>
+              {type === "MARKET" ? "Market" : "Limit"}
+            </Text>
+          </Pressable>
+        ))}
+        {orderType === "LIMIT" ? (
+          <TextInput
+            value={limitPrice}
+            onChangeText={setLimitPrice}
+            keyboardType="decimal-pad"
+            placeholder="Limit price"
+            placeholderTextColor={colors.muted}
+            style={styles.priceInput}
+          />
+        ) : null}
+      </View>
       <View style={styles.chips}>
         {underlyings.map((item) => (
           <Pressable
@@ -204,6 +243,18 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   chipText: { fontWeight: "700", fontSize: 12 },
   chipTextOn: { color: "#fff" },
+  priceInput: {
+    minWidth: 96,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.card,
+    fontWeight: "700",
+    fontSize: 12,
+    color: colors.text || "#0f172a",
+  },
   strike: { fontWeight: "800", marginBottom: 8 },
   row: { flexDirection: "row", justifyContent: "space-between" },
   actions: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
