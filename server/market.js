@@ -17,6 +17,7 @@ import {
   getUnderlying,
   isMcxSymbol,
   listedExpiries,
+  currentOptionExpiry,
   nearestWeeklyExpiry,
   underlyingIdFromSymbol,
   normalizeExpiry,
@@ -2567,14 +2568,11 @@ function instrumentLotSize(root, strike, fallback = 0) {
   return Math.max(0, Math.round(Number(fallback) || 0));
 }
 
-function shivamContractExpiry(config = {}, pack = {}, root = "") {
+export function shivamContractExpiry(config = {}, pack = {}, root = "") {
   const symbol = root || config.symbol || "NIFTY";
-  const listed = niftyListedExpiries(pack, symbol);
-  const mcx = config.session === "mcx" || isMcxSymbol(symbol);
-  if (mcx || config.expiryKind !== "weekly") {
-    return pack?.meta?.expiry || listed[0] || upcomingExpiries(symbol)[0] || "";
-  }
-  return nearestWeeklyExpiry(listed, symbol) || pack?.meta?.expiry || listed[0] || "";
+  const current = currentOptionExpiry(pack?.meta?.expiries || [], symbol);
+  if (current) return current;
+  return pack?.meta?.expiry || upcomingExpiries(symbol)[0] || "";
 }
 
 function tickShivamT2sAlgo(algo, mode, feedLive) {

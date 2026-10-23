@@ -293,6 +293,11 @@ export function listedExpiries(symbol = "NIFTY", dates = []) {
   return dropExpired([...new Set([...listed, ...generated])].sort());
 }
 
+/** This week's live contract — including the monthly Tuesday. Do not skip to next week. */
+export function currentOptionExpiry(dates, symbol = "NIFTY") {
+  return listedExpiries(symbol, dates)[0] || "";
+}
+
 function lastWeekdayOfMonth(year, month, weekday) {
   const lastDay = new Date(Date.UTC(year, month, 0, 6, 30)).getUTCDate();
   for (let day = lastDay; day >= 1; day -= 1) {

@@ -6,6 +6,7 @@ import {
   isLastWeekdayOfMonth,
   isWeeklyOptionExpiry,
   listedExpiries,
+  currentOptionExpiry,
   nearestWeeklyExpiry,
   upcomingExpiries,
   UNDERLYINGS,
@@ -48,6 +49,19 @@ test("isWeeklyOptionExpiry skips NIFTY monthly Tuesdays", () => {
   assert.equal(isWeeklyOptionExpiry("2026-09-22", "NIFTY"), true);
   assert.equal(isWeeklyOptionExpiry("2026-09-29", "NIFTY"), false);
   assert.equal(isWeeklyOptionExpiry("2026-09-24", "NIFTY"), false);
+});
+
+test("currentOptionExpiry stays on this week's live date, even when that Tuesday is monthly", () => {
+  const listed = upcomingExpiries("NIFTY", 12);
+  const current = dropExpired(listed)[0];
+  const nextWeekly = nearestWeeklyExpiry(listed, "NIFTY");
+  assert.equal(currentOptionExpiry(listed, "NIFTY"), current);
+  assert.equal(currentOptionExpiry(["2026-10-27", "2026-11-03", "2026-11-10"], "NIFTY"), current);
+  if (current && nextWeekly && current !== nextWeekly) {
+    assert.equal(isLastWeekdayOfMonth(current, "Tue"), true);
+    assert.equal(isWeeklyOptionExpiry(current, "NIFTY"), false);
+    assert.equal(isWeeklyOptionExpiry(nextWeekly, "NIFTY"), true);
+  }
 });
 
 test("nearestWeeklyExpiry buys the next weekly and never the monthly", () => {

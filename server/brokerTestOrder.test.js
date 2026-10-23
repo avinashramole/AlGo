@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "path";
 import test from "node:test";
 import { seedOptionScripForTests } from "./frontFutures.js";
-import { nearestWeeklyExpiry, upcomingExpiries } from "./optionChain.js";
+import { currentOptionExpiry, nearestWeeklyExpiry, upcomingExpiries } from "./optionChain.js";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-broker-test-order-"));
 process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
@@ -20,12 +20,13 @@ const {
   replaceDhanBook,
   setDhanFeed,
   setOptionDesk,
+  shivamContractExpiry,
   strategyTradingStatus,
   toggleAlgo,
 } = await import("./market.js");
 const { installMemberBroker, saveClientSettings, selectMemberBroker } = await import("./memberDesk.js");
 
-const EXPIRY = nearestWeeklyExpiry(upcomingExpiries("NIFTY", 12), "NIFTY");
+const EXPIRY = currentOptionExpiry(upcomingExpiries("NIFTY", 12), "NIFTY");
 
 function liveMappedUser(id = "u-copy") {
   const user = { id, name: "Copy", email: `${id}@t2s.app`, role: "user" };
@@ -55,6 +56,19 @@ function pinAtmChain() {
     ],
   });
 }
+
+test("Shivam contract is this week's live expiry, not the next weekly", () => {
+  const current = currentOptionExpiry([], "NIFTY");
+  const nextWeekly = nearestWeeklyExpiry(upcomingExpiries("NIFTY", 12), "NIFTY");
+  const expiry = shivamContractExpiry(
+    { symbol: "NIFTY", expiryKind: "weekly" },
+    { meta: { expiries: [current, nextWeekly, "2026-11-10"] } },
+    "NIFTY",
+  );
+  assert.equal(expiry, current);
+  assert.ok(current);
+  if (current !== nextWeekly) assert.notEqual(expiry, nextWeekly);
+});
 
 test("strategyTradingStatus is LIVE only when enabled and runMode is live", () => {
   setDhanFeed({ live: true });
@@ -148,19 +162,21 @@ test("Test 1 order queues 1 ATM lot to Dhan and copies mapped clients", () => {
   }
 });
 
-test("Shivam Test 1 order keeps the same weekly expiry for admin and user when the desk is monthly", () => {
+test("Shivam Test 1 order keeps the current expiry for admin and user, not next week", () => {
   setDhanFeed({ live: true });
   drainPendingLiveAlgoOrders();
-  const monthly = "2026-10-27";
-  const weekly = nearestWeeklyExpiry(["2026-10-27", "2026-11-03", "2026-11-10"], "NIFTY");
+  const current = "2026-10-27";
+  const nextWeek = "2026-11-03";
   seedOptionScripForTests([
-    { root: "NIFTY", expiry: weekly, strike: 25000, option: "CE", securityId: "weekly-ce-25000" },
-    { root: "NIFTY", expiry: weekly, strike: 25000, option: "PE", securityId: "weekly-pe-25000" },
+    { root: "NIFTY", expiry: current, strike: 25000, option: "CE", securityId: "current-ce-25000" },
+    { root: "NIFTY", expiry: current, strike: 25000, option: "PE", securityId: "current-pe-25000" },
+    { root: "NIFTY", expiry: nextWeek, strike: 25000, option: "CE", securityId: "next-ce-25000" },
+    { root: "NIFTY", expiry: nextWeek, strike: 25000, option: "PE", securityId: "next-pe-25000" },
   ]);
   setOptionDesk({
     symbol: "NIFTY",
-    expiry: monthly,
-    expiries: [monthly, weekly, "2026-11-10"],
+    expiry: nextWeek,
+    expiries: [current, nextWeek, "2026-11-10"],
     spot: 25000,
     source: "dhan",
     rows: [
@@ -169,8 +185,8 @@ test("Shivam Test 1 order keeps the same weekly expiry for admin and user when t
         atm: true,
         callLtp: 120,
         putLtp: 110,
-        callId: "monthly-ce-25000",
-        putId: "monthly-pe-25000",
+        callId: "next-ce-25000",
+        putId: "next-pe-25000",
         lotSize: 65,
       },
     ],
@@ -186,22 +202,23 @@ test("Shivam Test 1 order keeps the same weekly expiry for admin and user when t
     mappedClientIds: [user.id],
   });
   try {
-    assert.equal(weekly, "2026-11-03");
+    assert.equal(nearestWeeklyExpiry([current, nextWeek, "2026-11-10"], "NIFTY"), nextWeek);
     toggleAlgo(created.id, { enabled: true });
     const sent = placeStrategyBrokerTestOrder(created.id, { confirm: true });
     assert.equal(sent.ok, true);
-    assert.equal(sent.contract?.expiry, weekly);
-    assert.equal(sent.contract?.securityId, "weekly-ce-25000");
+    assert.equal(sent.contract?.expiry, current);
+    assert.equal(sent.contract?.securityId, "current-ce-25000");
+    assert.notEqual(sent.contract?.securityId, "next-ce-25000");
     assert.notEqual(sent.result?.skippedAdmin, true);
     const queued = drainPendingLiveAlgoOrders();
     const admin = queued.find((row) => !row.copyUserId);
     const copy = queued.find((row) => row.copyUserId === user.id);
     assert.ok(admin, "admin Dhan order missing");
     assert.ok(copy, "mapped user copy missing");
-    assert.equal(admin.expiry, weekly);
-    assert.equal(copy.expiry, weekly);
-    assert.equal(admin.securityId, "weekly-ce-25000");
-    assert.equal(copy.securityId, "weekly-ce-25000");
+    assert.equal(admin.expiry, current);
+    assert.equal(copy.expiry, current);
+    assert.equal(admin.securityId, "current-ce-25000");
+    assert.equal(copy.securityId, "current-ce-25000");
     assert.equal(admin.brokerId, "dhan");
     assert.equal(copy.brokerId, "dhan");
   } finally {
