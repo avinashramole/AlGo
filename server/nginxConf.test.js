@@ -163,7 +163,8 @@ test("website deploy skips GitHub file dumps when git already matches origin", (
   assert.match(src, /data-test1-timeframe.*FirstCandleTimeframeBar/);
   assert.doesNotMatch(src, /data-test1-timeframe.*StrategyBuilder/);
   assert.doesNotMatch(src, /TEST1 Save still hardcodes 5m/);
-  assert.match(src, /\{CANDLE_ENTRY_RULE\} BUY CE: index green, future green, CE green/);
+  assert.match(src, /\{SHIVAM_T2S_BUY_RULE\}\. \{SHIVAM_T2S_SELL_RULE\}\. \{CANDLE_ENTRY_RULE\}/);
+  assert.match(src, /data-shivam-rules="true"/);
   assert.doesNotMatch(src, /Do not trade a doji on the index, future, or option candle/);
   assert.doesNotMatch(src, /timeframe: \["1m", "2m", "5m", "10m", "15m"\]\.includes/);
 });

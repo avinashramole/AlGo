@@ -23,6 +23,9 @@ import {
   isNiftyTest2Kind,
   isMultiIndexReversalKind,
   isShivamT2sKind,
+  SHIVAM_T2S_BUY_RULE,
+  SHIVAM_T2S_SELL_RULE,
+  CANDLE_ENTRY_RULE,
   MULTI_INDEX_SCRIPTS,
   isNiftyVwapHedgeKind,
   isNiftyVwapKind,
@@ -189,6 +192,20 @@ function ShivamSignalChip({ algo, onOpen }: { algo: AlgoStrategy; onOpen?: () =>
   );
 }
 
+function ShivamRules() {
+  return (
+    <div
+      className="mt-2 rounded-lg border border-brand-500/30 bg-[var(--card-muted)] px-3 py-2 text-[11px] font-semibold leading-snug text-slate-600"
+      data-shivam-rules="true"
+    >
+      <div className="font-extrabold uppercase tracking-wide text-brand-600">BUY / SELL rules</div>
+      <div data-shivam-rule="buy-ce">{SHIVAM_T2S_BUY_RULE}</div>
+      <div data-shivam-rule="buy-pe">{SHIVAM_T2S_SELL_RULE}</div>
+      <div data-shivam-rule="candle">{CANDLE_ENTRY_RULE}</div>
+    </div>
+  );
+}
+
 function ShivamCapitalStrip({ algo }: { algo: AlgoStrategy }) {
   const { data } = useMarket();
   const vs = algo.shivamState || {};
@@ -245,7 +262,9 @@ function ShivamTradeDetails({ algo, onClose }: { algo: AlgoStrategy; onClose: ()
             SL {Number(vs.slPrice || 0).toFixed(2)} ({vs.slStatus || "not broker-confirmed"}) · TGT {Number(vs.targetPrice || 0).toFixed(2)}
           </div>
           <div>Index {when(vs.indexBarTime)} · Future {when(vs.futureBarTime || vs.lastFutureBarTime)} · CE {when(vs.ceBarTime)} · PE {when(vs.peBarTime)}</div>
-          <div>Doji on index, future, or option = no trade</div>
+          <div data-shivam-rule="buy-ce">{SHIVAM_T2S_BUY_RULE}</div>
+          <div data-shivam-rule="buy-pe">{SHIVAM_T2S_SELL_RULE}</div>
+          <div data-shivam-rule="candle">{CANDLE_ENTRY_RULE}</div>
         </div>
       </div>
     </div>
@@ -341,7 +360,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "shivam-t2s" as const,
       category: "SHIVAM T2S",
-      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ATM auto · last completed candle · skip doji · skip wick > body · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · map clients`,
+      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ATM auto · ${SHIVAM_T2S_BUY_RULE} · ${SHIVAM_T2S_SELL_RULE} · last completed candle · skip doji · skip wick > body · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · map clients`,
     };
   }
   if (isMultiIndexReversalKind(algo)) {
@@ -1228,6 +1247,7 @@ function AlgoCard({
         </div>
       </div>
       {showsFirstCandleTimeframe(algo) ? <CardTimeframe algo={algo} /> : null}
+      {shivam ? <ShivamRules /> : null}
       {shivam ? <ShivamCapitalStrip algo={algo} /> : null}
       {shivam ? (
         <div

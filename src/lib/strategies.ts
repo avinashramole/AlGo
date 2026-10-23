@@ -364,6 +364,9 @@ export const MULTI_INDEX_TIMEFRAMES = DESK_TIMEFRAME_PRESETS;
 export const MULTI_INDEX_OFFSETS = [-4, -3, -2, -1, 0, 1, 2, 3, 4] as const;
 
 export const SHIVAM_T2S_NAME = "Shivam T2S Strategy";
+export const SHIVAM_T2S_BUY_RULE = "BUY CE: IDX green + FUT green + CE green";
+export const SHIVAM_T2S_SELL_RULE = "BUY PE: IDX red + FUT red + PE green";
+export const SHIVAM_T2S_RULES = `${SHIVAM_T2S_BUY_RULE}. ${SHIVAM_T2S_SELL_RULE}. ${CANDLE_ENTRY_RULE}`;
 
 export const SHIVAM_T2S_SCRIPTS = [
   { id: "NIFTY", label: "NIFTY 50", futures: "NIFTY FUT", session: "nse" as const, expiryKind: "weekly" as const },

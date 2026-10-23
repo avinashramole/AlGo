@@ -182,11 +182,13 @@ if ! grep -q 'export function AlgoTest' "$HOME_DIR/src/pages/Algo.tsx" || ! grep
   echo "FAIL: Algo Test page is missing the seeded Shivam T2S card."
   exit 1
 fi
-if ! grep -q '{CANDLE_ENTRY_RULE} BUY CE: index green, future green, CE green' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" \
+if ! grep -q '{SHIVAM_T2S_BUY_RULE}. {SHIVAM_T2S_SELL_RULE}. {CANDLE_ENTRY_RULE}' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" \
+  || ! grep -q 'data-shivam-rules="true"' "$HOME_DIR/src/pages/Algo.tsx" \
+  || ! grep -q 'BUY CE: IDX green + FUT green + CE green' "$HOME_DIR/src/lib/strategies.ts" \
   || ! grep -q 'Skip doji' "$HOME_DIR/server/candleQuality.js" \
   || ! grep -q 'candleAllowsEntry(indexBar)' "$HOME_DIR/server/shivamT2s/signals.js" \
   || ! grep -q 'isDojiColor' "$HOME_DIR/server/shivamT2s/signals.js"; then
-  echo "FAIL: Shivam T2S must skip doji candles on index, future, and option."
+  echo "FAIL: Shivam T2S must show BUY/SELL rules and skip doji candles on index, future, and option."
   exit 1
 fi
 if ! grep -q 'data-shivam-atm="true"' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'const strike = atmStrike' "$HOME_DIR/server/shivamT2s/ShivamT2sStrategy.js"; then

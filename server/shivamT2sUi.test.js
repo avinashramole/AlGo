@@ -31,6 +31,16 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(builder, /data-shivam-capital="true"/);
   assert.match(builder, /Capital management/);
   assert.match(page, /data-shivam-capital="true"/);
+  assert.match(page, /data-shivam-rules="true"/);
+  assert.match(page, /BUY \/ SELL rules/);
+  assert.match(page, /data-shivam-rule="buy-ce"/);
+  assert.match(page, /data-shivam-rule="buy-pe"/);
+  assert.match(page, /\{SHIVAM_T2S_BUY_RULE\}/);
+  assert.match(page, /\{SHIVAM_T2S_SELL_RULE\}/);
+  assert.match(lib, /SHIVAM_T2S_BUY_RULE = "BUY CE: IDX green \+ FUT green \+ CE green"/);
+  assert.match(lib, /SHIVAM_T2S_SELL_RULE = "BUY PE: IDX red \+ FUT red \+ PE green"/);
+  assert.match(strategies, /BUY CE: IDX green \+ FUT green \+ CE green/);
+  assert.match(strategies, /BUY PE: IDX red \+ FUT red \+ PE green/);
   assert.doesNotMatch(page, /1–100 filled BUY entries today/);
   assert.doesNotMatch(page, /Re-entries count\. Rejected orders do not/);
   assert.doesNotMatch(builder, /Filled BUY entries today count toward the limit/);
@@ -56,7 +66,8 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(quality, /Skip doji/);
   assert.match(signals, /candleAllowsEntry\(indexBar\)/);
   assert.match(signals, /isDojiColor/);
-  assert.match(deploy, /\{CANDLE_ENTRY_RULE\} BUY CE: index green, future green, CE green/);
+  assert.match(deploy, /SHIVAM_T2S_BUY_RULE/);
+  assert.match(builder, /\{SHIVAM_T2S_BUY_RULE\}\. \{SHIVAM_T2S_SELL_RULE\}\. \{CANDLE_ENTRY_RULE\}/);
   assert.match(deploy, /candleAllowsEntry\(indexBar\)/);
   assert.doesNotMatch(deploy, /Do not trade a doji on the index, future, or option candle/);
   assert.doesNotMatch(builder, /ITM offset/);

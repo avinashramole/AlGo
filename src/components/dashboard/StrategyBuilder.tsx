@@ -42,6 +42,8 @@ import {
   MULTI_INDEX_SCRIPTS,
   MULTI_INDEX_OFFSETS,
   SHIVAM_T2S_NAME,
+  SHIVAM_T2S_BUY_RULE,
+  SHIVAM_T2S_SELL_RULE,
   SHIVAM_T2S_SCRIPTS,
   DESK_TIMEFRAME_PRESETS,
   isNiftyOptionEngineKind,
@@ -272,7 +274,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
     }
     if (isShivamT2sKind(form) || shivam) {
       const script = SHIVAM_T2S_SCRIPTS.find((row) => row.id === form.symbol) || SHIVAM_T2S_SCRIPTS[0];
-      return `Shivam T2S · ${script.label} ${script.futures} · IDX ${form.indexTimeframe || "5m"} CE ${form.ceTimeframe || "5m"} PE ${form.peTimeframe || "5m"} · ATM auto · SL ${form.slValue || 20}${form.slMode === "points" ? " pts" : "%"} / TGT ${form.targetValue || 40}${form.targetMode === "points" ? " pts" : "%"} · max ${form.maxTradesPerDay || 5} trades/day · ${form.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · map clients`;
+      return `Shivam T2S · ${script.label} ${script.futures} · IDX ${form.indexTimeframe || "5m"} CE ${form.ceTimeframe || "5m"} PE ${form.peTimeframe || "5m"} · ATM auto · ${SHIVAM_T2S_BUY_RULE} · ${SHIVAM_T2S_SELL_RULE} · SL ${form.slValue || 20}${form.slMode === "points" ? " pts" : "%"} / TGT ${form.targetValue || 40}${form.targetMode === "points" ? " pts" : "%"} · max ${form.maxTradesPerDay || 5} trades/day · ${form.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · map clients`;
     }
     if (isMultiIndexReversalKind(form) || mir) {
       const script = MULTI_INDEX_SCRIPTS.find((row) => row.id === form.symbol) || MULTI_INDEX_SCRIPTS[0];
@@ -1024,7 +1026,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         ) : shivam ? (
           <div className="mt-2.5 space-y-1.5" data-shivam-settings="true">
             <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
-              {CANDLE_ENTRY_RULE} BUY CE: index green, future green, CE green. BUY PE: index red, future red, PE green. ATM strike is always auto-selected from the live future/index and changes with the market. Lot size comes from the live instrument master. Re-entries count as another daily trade. Rejected orders do not.
+              {SHIVAM_T2S_BUY_RULE}. {SHIVAM_T2S_SELL_RULE}. {CANDLE_ENTRY_RULE} ATM strike is always auto-selected from the live future/index and changes with the market. Lot size comes from the live instrument master. Re-entries count as another daily trade. Rejected orders do not.
             </div>
             <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4" data-shivam-timeframes="true">
               <DeskTimeframeSelect
