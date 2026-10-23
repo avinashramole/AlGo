@@ -133,10 +133,29 @@ let credentialsBlockedUntil = persistedBackoff.credentialsBlockedUntil;
 let quoteBackoffUntil = 0;
 let chainBusy = false;
 let optionDeskGen = 0;
+function emptyDhanLane() {
+  return {
+    requestSlot: Promise.resolve(),
+    orderSlot: Promise.resolve(),
+    nextAnyRequestAt: 0,
+    nextOptionChainAt: 0,
+    nextQuoteAt: 0,
+    nextOrderAt: 0,
+  };
+}
+
 const dhanLanes = {
-  admin: { requestSlot: Promise.resolve(), nextAnyRequestAt: 0, nextOptionChainAt: 0, nextQuoteAt: 0 },
-  member: { requestSlot: Promise.resolve(), nextAnyRequestAt: 0, nextOptionChainAt: 0, nextQuoteAt: 0 },
+  admin: emptyDhanLane(),
+  member: emptyDhanLane(),
 };
+const memberOrderLanes = new Map();
+let lastDhanIp = { at: 0, value: null };
+
+export function resetDhanRequestLanes() {
+  dhanLanes.admin = emptyDhanLane();
+  dhanLanes.member = emptyDhanLane();
+  memberOrderLanes.clear();
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
@@ -146,32 +165,53 @@ function laneState(lane) {
   return dhanLanes[lane] || dhanLanes.admin;
 }
 
-function waitForDhanSlot(kind, lane = "admin") {
-  const state = laneState(lane);
-  const anyGap = lane === "member" ? 450 : 220;
+function orderLaneState(lane, clientId) {
+  if (lane === "member" && clientId) {
+    const key = String(clientId);
+    if (!memberOrderLanes.has(key)) memberOrderLanes.set(key, emptyDhanLane());
+    return memberOrderLanes.get(key);
+  }
+  return laneState(lane);
+}
+
+export function waitForDhanSlot(kind, lane = "admin", clientId = "") {
+  const isOrder = kind === "order";
+  const state = isOrder ? orderLaneState(lane, clientId) : laneState(lane);
+  const anyGap = isOrder ? (lane === "member" ? 80 : 40) : lane === "member" ? 450 : 220;
   const quoteGap = lane === "member" ? 2200 : 1100;
-  const job = state.requestSlot.then(async () => {
+  const slotKey = isOrder ? "orderSlot" : "requestSlot";
+  const job = state[slotKey].then(async () => {
     const now = Date.now();
     const wait = Math.max(
       0,
-      state.nextAnyRequestAt - now,
-      kind === "optionchain" ? state.nextOptionChainAt - now : 0,
-      kind === "quote" ? state.nextQuoteAt - now : 0,
+      isOrder ? state.nextOrderAt - now : state.nextAnyRequestAt - now,
+      !isOrder && kind === "optionchain" ? state.nextOptionChainAt - now : 0,
+      !isOrder && kind === "quote" ? state.nextQuoteAt - now : 0,
     );
     if (wait) await sleep(wait);
     const t = Date.now();
+    if (isOrder) {
+      state.nextOrderAt = t + anyGap;
+      return;
+    }
     state.nextAnyRequestAt = t + anyGap;
     if (kind === "optionchain") state.nextOptionChainAt = t + 3500;
     if (kind === "quote") state.nextQuoteAt = t + quoteGap;
   });
-  state.requestSlot = job.catch(() => undefined);
+  state[slotKey] = job.catch(() => undefined);
   return job;
 }
 
-function requestKind(path) {
-  if (String(path || "").startsWith("/optionchain")) return "optionchain";
-  if (String(path || "").includes("/marketfeed")) return "quote";
+export function dhanRequestKind(path) {
+  const route = String(path || "");
+  if (route.startsWith("/orders")) return "order";
+  if (route.startsWith("/optionchain")) return "optionchain";
+  if (route.includes("/marketfeed")) return "quote";
   return "other";
+}
+
+function requestKind(path) {
+  return dhanRequestKind(path);
 }
 
 const SEGMENT_BY_CODE = {
@@ -382,7 +422,8 @@ function parseDhanIpPayload(json) {
 }
 
 async function fetchDhanIp() {
-  if (!accessToken) return null;
+  if (!accessToken) return lastDhanIp.value;
+  if (lastDhanIp.value && Date.now() - lastDhanIp.at < 5 * 60_000) return lastDhanIp.value;
   try {
     const res = await ipv4Request(`${DHAN_API}/ip/getIP`, { headers: authHeaders(accessToken, clientId) });
     const text = await res.text();
@@ -395,7 +436,8 @@ async function fetchDhanIp() {
     console.log(`Dhan getIP HTTP ${res.status}: ${String(text || "").slice(0, 400)}`);
     if (!res.ok) return null;
     const ip = parseDhanIpPayload(json);
-    if (!ip.detectedIP && !ip.primaryIP) return null;
+    if (!ip.detectedIP && !ip.primaryIP) return lastDhanIp.value;
+    lastDhanIp = { at: Date.now(), value: ip };
     setDhanFeed({ ipCheck: ip });
     const saved = listedIps(ip).join(" / ") || "none";
     const allowed =
@@ -537,7 +579,7 @@ async function dhanSend(method, path, token, id, body, opts = {}) {
   const kind = requestKind(path);
   let lastError = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    await waitForDhanSlot(kind, lane);
+    await waitForDhanSlot(kind, lane, id);
     const headers = authHeaders(token, id);
     if (body != null) headers["Content-Type"] = "application/json";
     const res = await ipv4Request(`${DHAN_API}${path}`, {
@@ -2229,14 +2271,7 @@ export async function placeDhanOrder(payload = {}) {
   if (priced !== payload) payload.price = priced.price;
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
   const useAmo = payload.afterMarketOrder === true || payload.amo === true || !liveSessionOpenForOrder(payload);
-  const ipPromise = creds.lane === "admin" ? fetchDhanIp() : Promise.resolve(null);
-  let algos = [];
-  try {
-    algos = snapshot().algos || [];
-  } catch {
-    algos = [];
-  }
-  const strategy = strategyForPlacedOrder(payload, algos);
+  const strategy = strategyForPlacedOrder(payload, []);
   const tagged = { ...payload, strategy };
   const correlationId = orderCorrelationId(tagged);
   if (strategy) rememberOrderStrategy({ correlationId, strategy }, strategy);
@@ -2279,11 +2314,11 @@ export async function placeDhanOrder(payload = {}) {
       try {
         result = await submit(body);
       } catch (retryError) {
-        stampPlaceError(retryError, await ipPromise, body, { ...liveExtra, afterMarketOrder: true });
+        stampPlaceError(retryError, await fetchDhanIp(), body, { ...liveExtra, afterMarketOrder: true });
         throw retryError;
       }
     } else {
-      stampPlaceError(error, await ipPromise, body, liveExtra);
+      stampPlaceError(error, await fetchDhanIp(), body, liveExtra);
       throw error;
     }
   }
@@ -2294,7 +2329,7 @@ export async function placeDhanOrder(payload = {}) {
     const error = new Error(dhanErrorText(result, "Dhan did not place this order."));
     error.status = 400;
     error.body = result;
-    stampPlaceError(error, await ipPromise, body, {
+    stampPlaceError(error, await fetchDhanIp(), body, {
       ...liveExtra,
       orderId,
       status: status || "REJECTED",

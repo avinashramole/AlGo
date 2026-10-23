@@ -70,6 +70,7 @@ import {
   snapshot,
   deskFeed,
   deskMtm,
+  patchOrderAckSnapshot,
   startAdminDailyTradeLogScheduler,
   getAdminBrokerBook,
   squareOff,
@@ -90,6 +91,7 @@ import {
   suppressArmedTarget,
   takeSuppressedTargetOrder,
   bookRejectedLiveOrder,
+  findBookedOrder,
   bookMemberCopyOnAdminDesk,
   queueLivePositionExit,
   findDeskPosition,
@@ -706,6 +708,21 @@ app.post("/api/auth/gmail", async (req, res) => {
 });
 
 let lastDeskSnapshot = null;
+
+function orderAckSnapshot() {
+  const patched = patchOrderAckSnapshot(lastDeskSnapshot);
+  if (patched) {
+    lastDeskSnapshot = patched;
+    return patched;
+  }
+  lastDeskSnapshot = snapshot();
+  return lastDeskSnapshot;
+}
+
+function continueCopySends() {
+  void awaitMemberCopySends();
+  void flushLiveAlgoOrders();
+}
 
 app.get("/api/desk-health", (_req, res) => {
   res.json(deskHealthPayload({ dhanLive: isDhanLive() }));
@@ -1550,7 +1567,7 @@ app.post("/api/orders", async (req, res) => {
   const body = req.body || {};
   const brokerId = routeManualOrderBrokerId(body, {
     dhanLive: isDhanLive(),
-    activeBrokerId: snapshot().activeBrokerId,
+    activeBrokerId: lastDeskSnapshot?.activeBrokerId || publicBrokers().activeBrokerId,
   });
   try {
     if ((brokerId === "dhan" && isDhanLive()) || (brokerId !== "paper" && isLiveBrokerReady(brokerId))) {
@@ -1559,7 +1576,7 @@ app.post("/api/orders", async (req, res) => {
         return;
       }
       const live = await sendLiveBrokerOrder({ ...body, brokerId });
-      let order = snapshot().orders.find((row) => String(row.id) === String(live.orderId));
+      let order = findBookedOrder(live.orderId);
       if (!order) {
         order = placeOrder({ ...body, brokerId, live });
         if (order.error) {
@@ -1569,14 +1586,13 @@ app.post("/api/orders", async (req, res) => {
       } else {
         fanOutAdminOrderCopies({ ...body, brokerId, live }, order);
       }
-      await awaitMemberCopySends();
-      await flushLiveAlgoOrders();
+      continueCopySends();
       res.status(201).json({
         ok: true,
         live: true,
         afterMarketOrder: Boolean(live.afterMarketOrder),
         order,
-        snapshot: snapshot(),
+        snapshot: orderAckSnapshot(),
       });
       return;
     }
@@ -1585,8 +1601,7 @@ app.post("/api/orders", async (req, res) => {
       res.status(400).json({ error: order.error });
       return;
     }
-    await awaitMemberCopySends();
-    await flushLiveAlgoOrders();
+    continueCopySends();
     res.status(201).json({
       ok: true,
       live: false,
@@ -1595,19 +1610,18 @@ app.post("/api/orders", async (req, res) => {
           ? undefined
           : `Order stayed on the T2S desk. ${brokerId} is not LIVE — connect it on Brokers first.`,
       order,
-      snapshot: snapshot(),
+      snapshot: orderAckSnapshot(),
     });
   } catch (error) {
     const booked = brokerId === "dhan" ? bookRejectedLiveOrder({ ...body, brokerId }, error) : null;
     if (booked && !booked.error) {
-      await awaitMemberCopySends();
-      await flushLiveAlgoOrders();
+      continueCopySends();
       res.status(201).json({
         ok: false,
         live: true,
         error: String(error.message || "Dhan received this order and rejected it."),
         order: booked,
-        snapshot: snapshot(),
+        snapshot: orderAckSnapshot(),
       });
       return;
     }

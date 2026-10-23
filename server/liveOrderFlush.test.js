@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isRetryableCopyError, sendQueuedLiveOrders } from "./liveOrderFlush.js";
+import { COPY_SEND_CONCURRENCY, isRetryableCopyError, sendQueuedLiveOrders } from "./liveOrderFlush.js";
 
 test("admin and the first mapped copies start together", async () => {
   const started = [];
@@ -55,7 +55,7 @@ test("one rejected request does not block the other", async () => {
   assert.equal(results[1].brokerId, "zerodha");
 });
 
-test("a large copy list does not open every member broker at once", async () => {
+test("mapped copies go out together instead of two at a time", async () => {
   let inFlight = 0;
   let peak = 0;
   const copies = Array.from({ length: 8 }, (_, index) => ({
@@ -75,7 +75,8 @@ test("a large copy list does not open every member broker at once", async () => 
   });
   assert.equal(results.length, 8);
   assert.equal(results.every((row) => row.ok), true);
-  assert.ok(peak <= 2, `copy peak was ${peak}`);
+  assert.ok(peak >= 4, `copy peak was ${peak}`);
+  assert.ok(peak <= COPY_SEND_CONCURRENCY, `copy peak was ${peak}`);
 });
 
 test("a 429 copy is not retried so Upstox UDAPI10005 cannot storm", async () => {

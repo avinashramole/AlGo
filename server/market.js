@@ -3805,6 +3805,27 @@ export function startAdminDailyTradeLogScheduler() {
   adminBookSweepTimer = setTimeout(tick, msUntilBookClear());
 }
 
+export function orderBookAck() {
+  const { orders, positions, closedTrades } = liveDesk();
+  return {
+    orders,
+    positions,
+    closedTrades,
+    notifications: (state.notifications || []).slice(0, 40),
+  };
+}
+
+export function patchOrderAckSnapshot(base) {
+  if (!base || typeof base !== "object") return null;
+  return { ...base, ...orderBookAck() };
+}
+
+export function findBookedOrder(orderId) {
+  const id = String(orderId || "").trim();
+  if (!id) return null;
+  return (state.orders || []).find((row) => String(row.id) === id) || null;
+}
+
 function liveDesk() {
   clearAdminDailyTradeLog();
   const live = isDhanFeedLive();
