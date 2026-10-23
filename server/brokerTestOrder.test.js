@@ -18,9 +18,11 @@ const {
   placeStrategyBrokerTestOrder,
   queueLiveAlgoOrder,
   replaceDhanBook,
+  resolveAlgoTrade,
   setDhanFeed,
   setOptionDesk,
   shivamContractExpiry,
+  shivamDeskMatchesExpiry,
   strategyTradingStatus,
   toggleAlgo,
 } = await import("./market.js");
@@ -68,6 +70,40 @@ test("Shivam contract is this week's live expiry, not the next weekly", () => {
   assert.equal(expiry, current);
   assert.ok(current);
   if (current !== nextWeekly) assert.notEqual(expiry, nextWeekly);
+  assert.equal(shivamDeskMatchesExpiry({ meta: { expiry: nextWeekly } }, current), current === nextWeekly);
+  assert.equal(shivamDeskMatchesExpiry({ meta: { expiry: current } }, current), true);
+});
+
+test("Shivam card trade stays on the current expiry when the desk is next week", () => {
+  const current = currentOptionExpiry([], "NIFTY");
+  const nextWeekly = nearestWeeklyExpiry(upcomingExpiries("NIFTY", 12), "NIFTY") || "2026-11-03";
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry: nextWeekly,
+    expiries: [current, nextWeekly, "2026-11-10"],
+    spot: 25000,
+    source: "dhan",
+    rows: [{ strike: 25000, atm: true, callLtp: 88, putLtp: 77, callId: "next-ce", putId: "next-pe", lotSize: 65 }],
+  });
+  const created = createAlgo({
+    kind: "shivam-t2s",
+    testDesk: true,
+    runMode: "live",
+    liveAuthorized: true,
+    brokerId: "dhan",
+  });
+  try {
+    const trade = resolveAlgoTrade(created);
+    assert.equal(trade.expiry, current);
+    assert.notEqual(trade.securityId, "next-ce");
+    if (current !== nextWeekly) {
+      assert.equal(trade.ready, false);
+      assert.match(String(trade.hint), /current expiry/i);
+    }
+  } finally {
+    deleteAlgo(created.id);
+    pinAtmChain();
+  }
 });
 
 test("strategyTradingStatus is LIVE only when enabled and runMode is live", () => {

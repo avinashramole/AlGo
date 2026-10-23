@@ -2575,6 +2575,12 @@ export function shivamContractExpiry(config = {}, pack = {}, root = "") {
   return pack?.meta?.expiry || upcomingExpiries(symbol)[0] || "";
 }
 
+export function shivamDeskMatchesExpiry(pack = {}, expiry = "") {
+  const desk = normalizeExpiry(pack?.meta?.expiry);
+  const want = normalizeExpiry(expiry);
+  return Boolean(desk && want && desk === want);
+}
+
 function tickShivamT2sAlgo(algo, mode, feedLive) {
   const now = Date.now();
   if (mode === "live") releaseStaleLiveSend(algo, now);
@@ -2605,6 +2611,7 @@ function tickShivamT2sAlgo(algo, mode, feedLive) {
   const und = getUnderlying(root);
   const pack = chainForSymbol(root);
   const expiry = shivamContractExpiry(config, pack, root);
+  const deskReady = shivamDeskMatchesExpiry(pack, expiry);
   const lastIndex = (getCandles(config.indexTimeframe, root) || []).at(-1);
   const futLtp = liveLtpForSymbol(config.futuresInstrument) || 0;
   const spot = futLtp || Number(getChainSpot(root)) || Number(lastIndex?.close) || 0;
@@ -2620,8 +2627,8 @@ function tickShivamT2sAlgo(algo, mode, feedLive) {
     vs.peBars = [];
     vs.peStrike = peStrike;
   }
-  const ceLtp = optionPremium(root, ceStrike, "CE");
-  const peLtp = optionPremium(root, peStrike, "PE");
+  const ceLtp = deskReady ? optionPremium(root, ceStrike, "CE") : 0;
+  const peLtp = deskReady ? optionPremium(root, peStrike, "PE") : 0;
   const barOpts = mcx ? { sessionOpenMinutes: 9 * 60, sessionCloseMinutes: 23 * 60 + 30 } : undefined;
   const ceBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.ceBarMinutes || 5, barOpts) || 0;
   const peBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.peBarMinutes || 5, barOpts) || 0;
@@ -3297,7 +3304,48 @@ function resolveCrudeFirstCandleTrade(algo) {
   };
 }
 
+function resolveShivamAlgoTrade(algo) {
+  const config = shivamT2sConfig(algo);
+  const root = config.symbol;
+  const und = getUnderlying(root);
+  const pack = chainForSymbol(root);
+  const expiry = shivamContractExpiry(config, pack, root);
+  const vs = shivamState(algo);
+  const spot = Number(getChainSpot(root)) || Number(pack?.meta?.spot) || 0;
+  const step = Number(und.step) || 50;
+  const strike = Number(vs.strike || vs.atmStrike) || atmStrike(spot, step);
+  const option = vs.option === "PE" || vs.option === "CE" ? vs.option : "";
+  const deskReady = shivamDeskMatchesExpiry(pack, expiry);
+  const row = deskReady ? (pack?.rows || []).find((item) => Number(item.strike) === Number(strike)) : null;
+  const ceLtp = Number(row?.callLtp);
+  const peLtp = Number(row?.putLtp);
+  const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
+  const securityId = optionLegId(strike, option || "CE", root, expiry);
+  const contract = option ? `${root} ${strike} ${option}` : `${root} ${strike || "ATM"}`;
+  const liveChain = pack?.meta?.source === "dhan";
+  let hint = "";
+  if (!liveChain) hint = `Open Options on ${root} for live ATM CE/PE`;
+  else if (!deskReady) hint = `Waiting for current expiry ${expiry} chain`;
+  else if (!row) hint = `No ${strike} ATM on the ${root} tape yet`;
+  else if (!(ceLtp > 0) && !(peLtp > 0)) hint = "Waiting for live ATM option LTP";
+  else hint = `CE ${ceLtp > 0 ? ceLtp : "—"} · PE ${peLtp > 0 ? peLtp : "—"}`;
+  return {
+    kind: "option",
+    symbol: contract,
+    option: option || "CE",
+    strike,
+    expiry,
+    securityId: securityId ? String(securityId) : "",
+    ltp: deskReady && premium > 0 ? round2(premium) : 0,
+    label: expiry ? `${contract} · ${expiry}` : contract,
+    source: pack?.meta?.source || "",
+    ready: liveChain && deskReady && (ceLtp > 0 || peLtp > 0),
+    hint,
+  };
+}
+
 export function resolveAlgoTrade(algo) {
+  if (isShivamT2sAlgo(algo)) return resolveShivamAlgoTrade(algo);
   if (isMultiIndexReversalAlgo(algo)) {
     const cfg = multiIndexReversalConfig(algo);
     const symbol = cfg.symbol;
