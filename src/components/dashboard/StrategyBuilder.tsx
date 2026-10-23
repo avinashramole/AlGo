@@ -274,7 +274,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
     }
     if (isShivamT2sKind(form) || shivam) {
       const script = SHIVAM_T2S_SCRIPTS.find((row) => row.id === form.symbol) || SHIVAM_T2S_SCRIPTS[0];
-      return `Shivam T2S · ${script.label} ${script.futures} · IDX ${form.indexTimeframe || "5m"} CE ${form.ceTimeframe || "5m"} PE ${form.peTimeframe || "5m"} · ATM auto · ${SHIVAM_T2S_BUY_RULE} · ${SHIVAM_T2S_SELL_RULE} · SL ${form.slValue || 20}${form.slMode === "points" ? " pts" : "%"} / TGT ${form.targetValue || 40}${form.targetMode === "points" ? " pts" : "%"} · max ${form.maxTradesPerDay || 5} trades/day · ${form.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · map clients`;
+      return `Shivam T2S · ${script.label} ${script.futures} · IDX ${form.indexTimeframe || "5m"} CE ${form.ceTimeframe || "5m"} PE ${form.peTimeframe || "5m"} · ATM auto · ${SHIVAM_T2S_BUY_RULE} · ${SHIVAM_T2S_SELL_RULE} · SL ${form.slValue || 20}${form.slMode === "points" ? " pts" : "%"} / TGT ${form.targetValue || 40}${form.targetMode === "points" ? " pts" : "%"} · max ${form.maxTradesPerDay || 5} trades/day · ${form.runMode === "live" ? "Live Dhan · admin + Copy ON / mapped brokers" : "Paper"} · copy trade`;
     }
     if (isMultiIndexReversalKind(form) || mir) {
       const script = MULTI_INDEX_SCRIPTS.find((row) => row.id === form.symbol) || MULTI_INDEX_SCRIPTS[0];
@@ -557,7 +557,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             <div className="text-sm font-bold sm:text-base">{title}</div>
             {editing ? null : (
               <div className="desk-help line-clamp-2 text-[11px] text-slate-400">
-                {testDesk ? "Algo Test keeps its own book. Start paper or live, then map clients to copy their brokers. " : ""}
+                {testDesk ? "Algo Test keeps its own book. Start paper or live, then Copy trade or Copy ON so users follow. " : ""}
                 {preview}
               </div>
             )}
@@ -578,7 +578,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <TypeCard
             active={shivam}
             title="SHIVAM T2S"
-            text={`Live trading strategy on Algo Test. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. ${CANDLE_ENTRY_RULE} ATM auto from the instrument master. Paper or Live Dhan after Start. Live entries go to the admin broker and mapped user brokers. Capital management uses Dhan funds and the live lot size. Map clients on the card to copy users. Card shows ● ● ● or NO Trade.`}
+            text={`Live trading strategy on Algo Test. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. ${CANDLE_ENTRY_RULE} ATM auto from the instrument master. Paper or Live Dhan after Start. Live entries go to the admin broker and Copy ON / mapped user brokers. Capital management uses Dhan funds and the live lot size. Copy trade on the card maps clients; leave empty so Copy ON users follow. Card shows ● ● ● or NO Trade.`}
             onClick={() => {
               const next = emptyStrategy("shivam-t2s");
               set({
@@ -598,7 +598,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <TypeCard
             active={test1}
             title="TEST1"
-            text="Algo Test copy of TEST1. Paper or Live after Start. Map clients on the card to copy user brokers."
+            text="Algo Test copy of TEST1. Paper or Live after Start. Copy trade on the card maps user brokers; Copy ON users follow when nobody is ticked."
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-test1"),
@@ -616,7 +616,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <TypeCard
             active={mir}
             title="MULTI-INDEX"
-            text="Algo Test copy of Multi-Index. Paper or Live after Start. Map clients on the card to copy user brokers."
+            text="Algo Test copy of Multi-Index. Paper or Live after Start. Copy trade on the card maps user brokers; Copy ON users follow when nobody is ticked."
             onClick={() => {
               const next = emptyStrategy("multi-index-reversal");
               set({
@@ -709,7 +709,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <TypeCard
             active={shivam}
             title="SHIVAM T2S"
-            text={`Algo Test only. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. ${CANDLE_ENTRY_RULE} ATM auto from the instrument master. Paper or Live Dhan after Start. Live entries go to the admin broker and mapped user brokers. Map clients on the card to copy users. Card shows ● ● ● or NO Trade.`}
+            text={`Algo Test only. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. ${CANDLE_ENTRY_RULE} ATM auto from the instrument master. Paper or Live Dhan after Start. Live entries go to the admin broker and Copy ON / mapped user brokers. Copy trade on the card maps clients; leave empty so Copy ON users follow. Card shows ● ● ● or NO Trade.`}
             onClick={() => {
               const next = emptyStrategy("shivam-t2s");
               set({
@@ -1695,7 +1695,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               : mir
               ? "Multi-Index Reversal stays paper until you choose Live and press Start. Saving this form does not start LIVE and does not place an order."
               : shivam
-              ? "Shivam T2S stays on Algo Test. Choose Live, then press Start live to send real CE/PE orders to the admin broker and mapped user brokers. Saving this form does not start LIVE and does not place an order."
+              ? "Shivam T2S stays on Algo Test. Choose Live, then press Start live to send real CE/PE orders to the admin broker and Copy ON / mapped user brokers. Saving this form does not start LIVE and does not place an order."
               : "Live stays off until you press Start strategy on the algo card. Saving this form does not place orders."}
           </p>
         ) : null}

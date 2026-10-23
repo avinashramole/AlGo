@@ -231,7 +231,7 @@ function ShivamCapitalStrip({ algo }: { algo: AlgoStrategy }) {
         {vs.requiredFunds ? ` · required ₹${formatNumber(Number(vs.requiredFunds), 2)}` : ""}
       </div>
       <div>
-        Trades {used} / {limit} · remaining {Math.max(0, limit - used)} · {algo.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · mapped {Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds.length : 0}
+        Trades {used} / {limit} · remaining {Math.max(0, limit - used)} · {algo.runMode === "live" ? "Live Dhan · admin + Copy ON / mapped brokers" : "Paper"} · mapped {Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds.length : 0}
       </div>
     </div>
   );
@@ -360,7 +360,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "shivam-t2s" as const,
       category: "SHIVAM T2S",
-      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ATM auto · ${SHIVAM_T2S_BUY_RULE} · ${SHIVAM_T2S_SELL_RULE} · last completed candle · skip doji · skip wick > body · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · map clients`,
+      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ATM auto · ${SHIVAM_T2S_BUY_RULE} · ${SHIVAM_T2S_SELL_RULE} · last completed candle · skip doji · skip wick > body · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live Dhan · admin + Copy ON / mapped brokers" : "Paper"} · copy trade`,
     };
   }
   if (isMultiIndexReversalKind(algo)) {
@@ -584,7 +584,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
       const ready = check?.brokerReady ? `${broker} is LIVE` : `${broker} is NOT LIVE`;
       if (
         !window.confirm(
-          `Send 1 lot BUY ${contract} to ${broker} and mapped clients?\n\n${algo.name} is ${label}. ${ready}. Mapped clients copy 1 lot on their own broker. This is a real order if the broker is LIVE.`,
+          `Send 1 lot BUY ${contract} to ${broker} and Copy ON / mapped clients?\n\n${algo.name} is ${label}. ${ready}. Copy ON and mapped clients copy 1 lot on their own broker. This is a real order if the broker is LIVE.`,
         )
       ) {
         return;
@@ -638,7 +638,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
               <h1 className="text-xl font-bold">{testDesk ? "Algo Test" : "Algo Strategies"}</h1>
               <p className="text-sm text-slate-400">
                 {testDesk
-                  ? `${deskAlgos.filter((row) => row.enabled && row.runMode === "live").length} live · ${deskAlgos.length} test strategies · own book · map clients to copy`
+                  ? `${deskAlgos.filter((row) => row.enabled && row.runMode === "live").length} live · ${deskAlgos.length} test strategies · own book · Copy trade / Copy ON to copy`
                   : `${deskAlgos.filter((row) => row.enabled).length} live · ${deskAlgos.length} strategies`}
               </p>
             </div>
@@ -771,7 +771,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
               <div className="text-base font-bold">No strategies in this view</div>
               <p className="mt-1 text-sm text-slate-400">
                 {testDesk
-                  ? "Add SHIVAM T2S or another test strategy. Start paper or live on any card, then map clients to copy those users."
+                  ? "Add SHIVAM T2S or another test strategy. Start paper or live on any card, then use Copy trade or Copy ON so users follow."
                   : "Add a NIFTY 5m or CRUDE OIL strategy to start the desk."}
               </p>
               <button type="button" onClick={openAdd} className="mt-4 h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
@@ -1509,7 +1509,7 @@ function AlgoCard({
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={onMap} className="inline-flex h-10 items-center gap-1.5 text-sm font-semibold" data-shivam-map="true">
             <Users size={15} />
-            Map clients
+            Copy trade
           </button>
           <ClientVisibleToggle algo={algo} />
         </div>
@@ -1676,7 +1676,7 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
       <div className="desk-sheet relative z-10 flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
         <div className="flex items-center justify-between px-3 py-2">
-          <h2 className="text-sm font-bold">Map clients to strategy</h2>
+          <h2 className="text-sm font-bold">Copy trade · map clients</h2>
           <button type="button" className="text-slate-400" onClick={onClose} aria-label="Close">
             <X size={16} />
           </button>
@@ -1688,7 +1688,7 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
             </div>
             <div>
               <div className="text-sm font-bold">{algo.name}</div>
-              <div className="text-xs text-slate-400">Choose where this strategy will execute</div>
+              <div className="text-xs text-slate-400">Pick clients, or leave empty so Copy ON users follow the admin</div>
             </div>
           </div>
           <label className="grid gap-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
@@ -1705,10 +1705,12 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
           </label>
           <p className="text-[11px] font-semibold leading-snug text-slate-500">
             {scope === "master"
-              ? "Orders go to the admin broker only. Mapped clients do not receive a copy."
+              ? "Orders go to the admin broker only. Copy ON and mapped clients do not receive a copy."
               : scope === "clients"
-                ? "Admin stays on the signal only. Live orders go to enrolled mapped clients on their own brokers — not the admin account."
-                : "Admin broker and selected clients both receive the live order."}
+                ? "Admin stays on the signal only. Live orders go to Copy ON or selected clients on their own brokers — not the admin account."
+                : picked.length
+                  ? "Admin broker and the selected clients both receive the live order."
+                  : "Admin broker plus every Copy ON client (copy trade). Tick names to copy only those clients."}
           </p>
           <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
             {clients.map((row) => {
@@ -1726,6 +1728,7 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
                     <span className="block text-sm font-semibold">{row.name}</span>
                     <span className="block text-[11px] text-slate-400">
                       {row.brokerName} · {row.linked || row.tradeMode === "real" ? "Active account" : "Paper account"}
+                      {row.copy ? " · Copy ON" : ""}
                     </span>
                   </span>
                 </label>

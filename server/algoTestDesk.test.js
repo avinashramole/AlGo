@@ -28,7 +28,7 @@ const {
   updateAlgo,
   withLiveAlgo,
 } = await import("./market.js");
-const { installMemberBroker, saveClientSettings, selectMemberBroker } = await import("./memberDesk.js");
+const { installMemberBroker, listDeskRecords, saveClientSettings, selectMemberBroker } = await import("./memberDesk.js");
 
 const FRI_0900 = Date.parse("2026-08-21T03:30:00.000Z");
 
@@ -38,6 +38,13 @@ function liveMappedUser(id = "u-algo-test") {
   installMemberBroker({ user, brokerId: "dhan", clientId: "11008899", accessToken: "member-dhan-token" });
   saveClientSettings(user.id, { copy: true });
   return user;
+}
+
+function silenceCopyOn() {
+  for (const row of listDeskRecords()) {
+    if (!row.userId || row.userId === "admin") continue;
+    saveClientSettings(row.userId, { copy: false, subscriptionMode: "strategy", mappedStrategy: "" });
+  }
 }
 
 test("Algo Test page, admin menu, and live+copy builder are wired", () => {
@@ -62,15 +69,15 @@ test("Algo Test page, admin menu, and live+copy builder are wired", () => {
   assert.match(algo, /data-shivam-map="true"/);
   assert.match(algo, /data-start-live="true"/);
   assert.match(algo, /Selected clients only/);
-  assert.match(algo, /Live orders go to enrolled mapped clients on their own brokers/);
+  assert.match(algo, /Live orders go to Copy ON or selected clients on their own brokers/);
   assert.match(algo, /Latest activity/);
   assert.match(algo, /data-latest-activity="true"/);
   assert.match(algo, /data-shivam-activity/);
   assert.match(algo, /data-test-broker-order="true"/);
   assert.match(algo, /data-shivam-live-check/);
   assert.match(algo, /algo.enabled && algo.runMode === "live"/);
-  assert.match(algo, /Live Dhan · admin \+ mapped brokers/);
-  assert.match(builder, /Live entries go to the admin broker and mapped user brokers/);
+  assert.match(algo, /Live Dhan · admin \+ Copy ON \/ mapped brokers/);
+  assert.match(builder, /Live entries go to the admin broker and Copy ON \/ mapped user brokers/);
   assert.match(builder, /liveAuthorized: true/);
   assert.match(builder, /testDesk = false/);
   assert.match(builder, /RUN_MODES\.map/);
@@ -539,6 +546,7 @@ test("Start live on Algo Test Shivam re-arms a stale card and queues admin plus 
 test("Algo Test clients-only with nobody mapped still places the admin live order", () => {
   setDhanFeed({ live: true });
   drainPendingLiveAlgoOrders();
+  silenceCopyOn();
   const created = createAlgo({
     name: `Algo Test empty clients ${Date.now()}`,
     kind: "nifty-first-candle",
@@ -576,6 +584,56 @@ test("Algo Test clients-only with nobody mapped still places the admin live orde
     assert.ok(admin);
     assert.equal(admin.brokerId, "dhan");
     assert.equal(queued.some((row) => row.copyUserId), false);
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
+});
+
+test("Algo Test clients-only with nobody ticked still copies a Copy ON user", () => {
+  setDhanFeed({ live: true });
+  drainPendingLiveAlgoOrders();
+  silenceCopyOn();
+  const user = liveMappedUser("u-test-copy-on-empty");
+  const created = createAlgo({
+    name: `Algo Test copy-on empty ${Date.now()}`,
+    kind: "nifty-first-candle",
+    testDesk: true,
+    runMode: "live",
+    brokerId: "dhan",
+    mappingScope: "clients",
+    mappedClientIds: [],
+    clientVisible: true,
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    const sent = queueLiveAlgoOrder({
+      strategy: created.name,
+      strategyId: created.id,
+      kind: "nifty-first-candle",
+      testDesk: true,
+      paper: false,
+      brokerId: "dhan",
+      side: "BUY",
+      symbol: "NIFTY 25050 CE",
+      qty: 65,
+      lots: 1,
+      lotSize: 65,
+      option: "CE",
+      strike: 25050,
+      securityId: "ce-25050",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(sent.queued, true);
+    assert.equal(sent.skippedAdmin, true);
+    const queued = drainPendingLiveAlgoOrders();
+    assert.equal(queued.some((row) => !row.copyUserId && row.strategy === created.name), false);
+    const copy = queued.find((row) => row.copyUserId === user.id);
+    assert.ok(copy);
+    assert.equal(copy.brokerId, "dhan");
+    assert.equal(copy.account?.accessToken, "member-dhan-token");
   } finally {
     deleteAlgo(created.id);
     drainPendingLiveAlgoOrders();

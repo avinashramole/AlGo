@@ -164,7 +164,7 @@ test("a mapped member with an installed token copies while logged off and with n
   assert.equal(mine.accountId, "1100555");
 });
 
-test("manual admin order does not copy an unmapped Copy ON member", async () => {
+test("manual admin order copies a Copy ON member when no card map is set", async () => {
   const user = { id: "u-copy-ignore-scope", name: "Ignore Scope", email: "ignorescope@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "dhan" });
   installMemberBroker({ user, brokerId: "dhan", clientId: "1100666", accessToken: "ignore-scope-token" });
@@ -174,12 +174,12 @@ test("manual admin order does not copy an unmapped Copy ON member", async () => 
     { symbol: "NIFTY 25300 CE", side: "BUY", qty: 65, price: 80, strategy: "Desk BUY", brokerId: "dhan" },
     { symbol: "NIFTY 25300 CE", side: "BUY", qty: 65, strategy: "Desk BUY" },
   );
-  assert.equal(result.copies, 0);
+  assert.ok(result.copies >= 1);
   await awaitMemberCopySends();
   const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
   assert.equal(
     (desk.alerts || []).some((row) => row.symbol === "NIFTY 25300 CE"),
-    false,
+    true,
   );
 });
 
@@ -195,7 +195,7 @@ test("Copy ON with a saved token is a live target even in paper mode", () => {
   assert.equal(mine.accountId, "1100444");
 });
 
-test("turning Copy on without a through date does not copy until the user is mapped", () => {
+test("turning Copy on without a through date still copies admin orders", () => {
   const user = { id: "u-copy-no-until", name: "Copy No Until", email: "copynountil@t2s.app", role: "user" };
   const saved = saveClientSettings(user.id, {
     copy: true,
@@ -211,10 +211,10 @@ test("turning Copy on without a through date does not copy until the user is map
     mappingScope: "both",
     mappedClientIds: [],
   });
-  assert.equal(targets.some((row) => row.userId === user.id), false);
+  assert.equal(targets.some((row) => row.userId === user.id), true);
 });
 
-test("Copy ON without a card map does not receive admin orders", () => {
+test("Copy ON without a card map receives admin orders", () => {
   const user = { id: "u-copy-master", name: "Copy Master", email: "copymaster@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "paper" });
   saveClientSettings(user.id, {
@@ -232,7 +232,7 @@ test("Copy ON without a card map does not receive admin orders", () => {
     mappingScope: "both",
     mappedClientIds: [],
   });
-  assert.equal(targets.some((row) => row.userId === user.id), false);
+  assert.equal(targets.some((row) => row.userId === user.id), true);
 });
 
 test("users mapped strategy on All clients copies that strategy without enrollment", () => {
@@ -928,6 +928,62 @@ test("NIFTY first candle copies only users mapped on that card and keeps the NIF
   assert.equal(master.some((row) => row.copyUserId === user.id), false);
 });
 
+test("Copy ON follows Shivam T2S when the card map is empty", () => {
+  const user = { id: "u-shivam-copy-on", name: "Shivam Copy", email: "shivamcopy@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "11008821", accessToken: "shivam-copy-token" });
+  saveClientSettings(user.id, {
+    copy: true,
+    subscriptionMode: "copy",
+    tradeMode: "real",
+    brokerId: "dhan",
+    subscriptionUntil: "2026-12-31",
+  });
+  const copies = memberCopyPayloads(
+    {
+      strategy: "Shivam T2S",
+      side: "BUY",
+      symbol: "NIFTY 24800 CE",
+      qty: 65,
+      lotSize: 65,
+      price: 88,
+      option: "CE",
+      strike: 24800,
+      brokerId: "dhan",
+    },
+    { id: "a-shivam-t2s", name: "Shivam T2S", mappingScope: "both", mappedClientIds: [] },
+  );
+  const mine = copies.find((row) => row.copyUserId === user.id);
+  assert.ok(mine, "Copy ON must receive Shivam when no clients are ticked on the card");
+  assert.equal(mine.symbol, "NIFTY 24800 CE");
+  assert.equal(mine.qty, 65);
+  assert.equal(mine.account.accessToken, "shivam-copy-token");
+});
+
+test("Copy ON mapped-strategies-only does not follow every empty card", () => {
+  const user = { id: "u-copy-strategy-only", name: "Strategy Only", email: "strategyonly@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "11008822", accessToken: "strategy-only-token" });
+  saveClientSettings(user.id, {
+    copy: true,
+    subscriptionMode: "strategy",
+    mappedStrategy: "CRUDE OIL 5m first candle",
+    tradeMode: "real",
+    brokerId: "dhan",
+    subscriptionUntil: "2026-12-31",
+  });
+  const shivam = memberCopyPayloads(
+    { strategy: "Shivam T2S", side: "BUY", symbol: "NIFTY 24800 CE", qty: 65, lotSize: 65, brokerId: "dhan" },
+    { id: "a-shivam-t2s", name: "Shivam T2S", mappingScope: "both", mappedClientIds: [] },
+  );
+  assert.equal(shivam.some((row) => row.copyUserId === user.id), false);
+  const crude = memberCopyPayloads(
+    { strategy: "CRUDE OIL 5m first candle", side: "BUY", symbol: "CRUDEOIL 6100 CE", qty: 100, lotSize: 100, brokerId: "dhan" },
+    { id: "a-crude", name: "CRUDE OIL 5m first candle", mappingScope: "both", mappedClientIds: [] },
+  );
+  assert.equal(crude.some((row) => row.copyUserId === user.id), true);
+});
+
 test("an unmapped Copy ON member does not receive a NIFTY order when the card already has a map", () => {
   const mapped = { id: "u-nifty-mapped", name: "Mapped Nifty", email: "mappednifty@t2s.app", role: "user" };
   const avinash = { id: "u-avinash-ramole", name: "Avinash Ramole", email: "avinash.ramole86@gmail.com", role: "user" };
@@ -1005,7 +1061,7 @@ test("crude first candle does not copy a NIFTY-mapped Kotak user", () => {
   );
 });
 
-test("crude Copy ON Upstox does not copy when the Crude card has no map", () => {
+test("crude Copy ON Upstox copies when the Crude card has no map", () => {
   const saved = {
     id: process.env.T2S_KOTAK_CLIENT_ID,
     key: process.env.T2S_KOTAK_CONSUMER_KEY,
@@ -1057,7 +1113,8 @@ test("crude Copy ON Upstox does not copy when the Crude card has no map", () => 
     );
     const upx = copies.find((row) => row.copyUserId === upstox.id);
     const ktk = copies.find((row) => row.copyUserId === kotak.id);
-    assert.equal(upx, undefined, "Copy ON Upstox user must not receive Crude when the Crude card has no map");
+    assert.ok(upx, "Copy ON Upstox user follows Crude when the Crude card has no map");
+    assert.equal(upx.brokerId, "upstox");
     assert.equal(ktk, undefined, "NIFTY-mapped Kotak user must not receive Crude");
   } finally {
     if (saved.id == null) delete process.env.T2S_KOTAK_CLIENT_ID;

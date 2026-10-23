@@ -55,9 +55,10 @@ test("Market tape shows Option Chain lots and hides the extra chip row", () => {
   assert.equal(options.includes("{item.label} · {item.lot}"), false);
   assert.match(options, /TickerStrip selectedId/);
   assert.match(options, /data-option-chain-map="true"/);
-  assert.match(options, /Map clients/);
+  assert.match(options, /Copy trade/);
   assert.match(options, /saveOptionChainMap/);
-  assert.match(options, /Map clients to option chain/);
+  assert.match(options, /Copy trade · option chain/);
+  assert.match(options, /Copy ON clients receive BUY\/SELL/);
   assert.match(options, /Master \+ selected clients/);
   assert.doesNotMatch(options, /data-option-order-type=/);
   assert.doesNotMatch(options, /data-option-limit-price=/);

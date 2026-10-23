@@ -115,10 +115,10 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(page, /shivamActivityText\(algo, orders\)/);
   assert.match(css, /\.blotter-card\[data-shivam-strategy="true"\][\s\S]{0,80}overflow:\s*visible/);
   assert.match(page, /data-test-broker-order="true"/);
-  assert.match(page, /Mapped clients copy 1 lot on their own broker/);
-  assert.match(page, /Live Dhan · admin \+ mapped brokers/);
-  assert.match(builder, /Live entries go to the admin broker and mapped user brokers/);
-  assert.match(builder, /send real CE\/PE orders to the admin broker and mapped user brokers/);
+  assert.match(page, /Copy ON and mapped clients copy 1 lot on their own broker/);
+  assert.match(page, /Live Dhan · admin \+ Copy ON \/ mapped brokers/);
+  assert.match(builder, /Live entries go to the admin broker and Copy ON \/ mapped user brokers/);
+  assert.match(builder, /send real CE\/PE orders to the admin broker and Copy ON \/ mapped user brokers/);
   assert.doesNotMatch(page, /Mapped clients will not copy/);
   assert.doesNotMatch(page, /Mapped clients were not copied/);
   assert.match(page, /data-shivam-live-check/);

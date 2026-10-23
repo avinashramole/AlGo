@@ -54,7 +54,7 @@ export function Options() {
               data-option-chain-map="true"
             >
               <Users size={14} />
-              Map clients
+              Copy trade
               <span className="text-slate-400">{mappedCount}</span>
             </button>
             <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs font-semibold">
@@ -90,7 +90,7 @@ export function Options() {
                   ? " on mapped client brokers — not the admin account for copies."
                   : mappedCount
                     ? ` and copies ${mappedCount} mapped client${mappedCount === 1 ? "" : "s"}.`
-                    : ". Map clients to copy BUY/SELL onto their brokers."}{" "}
+                    : ". Copy ON clients receive BUY/SELL on their brokers. Tick names under Copy trade to limit who copies."}{" "}
               Confirm in the{" "}
               <Link to="/reports?tab=orders" className="underline">
                 order book
@@ -200,7 +200,7 @@ function MapClientsModal({
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
       <div className="desk-sheet relative z-10 flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
         <div className="flex items-center justify-between px-3 py-2">
-          <h2 className="text-sm font-bold">Map clients to option chain</h2>
+          <h2 className="text-sm font-bold">Copy trade · option chain</h2>
           <button type="button" className="text-slate-400" onClick={onClose} aria-label="Close">
             <X size={16} />
           </button>
@@ -212,7 +212,7 @@ function MapClientsModal({
             </div>
             <div>
               <div className="text-sm font-bold">Manual BUY / SELL</div>
-              <div className="text-xs text-slate-400">Choose who receives option chain orders</div>
+              <div className="text-xs text-slate-400">Pick clients, or leave empty so Copy ON users follow the admin</div>
             </div>
           </div>
           <label className="grid gap-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
@@ -229,10 +229,12 @@ function MapClientsModal({
           </label>
           <p className="text-[11px] font-semibold leading-snug text-slate-500">
             {scope === "master"
-              ? "Orders go to the admin broker only. Mapped clients do not receive a copy."
+              ? "Orders go to the admin broker only. Copy ON and mapped clients do not receive a copy."
               : scope === "clients"
-                ? "Admin stays on the signal only. Live copies go to mapped clients on their own brokers — not a second admin lot."
-                : "Admin broker and selected clients both receive the live order."}
+                ? "Admin stays on the signal only. Live copies go to Copy ON or selected clients on their own brokers — not a second admin lot."
+                : picked.length
+                  ? "Admin broker and the selected clients both receive the live order."
+                  : "Admin broker plus every Copy ON client (copy trade). Tick names to copy only those clients."}
           </p>
           <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
             {clients.map((row) => {
@@ -250,6 +252,7 @@ function MapClientsModal({
                     <span className="block text-sm font-semibold">{row.name}</span>
                     <span className="block text-[11px] text-slate-400">
                       {row.brokerName} · {row.linked || row.tradeMode === "real" ? "Active account" : "Paper account"}
+                      {row.copy ? " · Copy ON" : ""}
                     </span>
                   </span>
                 </label>

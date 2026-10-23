@@ -97,6 +97,16 @@ test("option chain master-only mapping does not copy", () => {
   assert.equal(sent.copies, 0);
 });
 
+test("option chain with nobody ticked still copies a Copy ON client", () => {
+  const user = liveMappedUser("u-chain-copy-on");
+  saveOptionChainMap({ mappingScope: "both", mappedClientIds: [] });
+  const copies = memberCopyPayloads(
+    { strategy: "", qty: 65, lotSize: 65, side: "BUY", symbol: "NIFTY 25200 CE", kind: "option" },
+    optionChainCopyAlgo(),
+  );
+  assert.equal(copies.some((row) => row.copyUserId === user.id), true);
+});
+
 test("desk snapshot exposes the option chain map", () => {
   saveOptionChainMap({ mappingScope: "clients", mappedClientIds: ["u-chain-live"] });
   const snap = snapshot();

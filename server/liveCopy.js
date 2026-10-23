@@ -113,7 +113,8 @@ function deskCopyMatches({ strategyName, strategyId } = {}) {
     const mappedHit =
       Boolean(mappedName) && (sameStrategy(mappedName, name) || mappedName === id || sameStrategy(mappedName, id));
     if (mappedHit) mapped.add(row.userId);
-    if (row.copy && subscriptionOpen(row.subscriptionUntil)) {
+    const mode = String(row.subscriptionMode || "copy").toLowerCase();
+    if (row.copy && subscriptionOpen(row.subscriptionUntil) && (mode === "copy" || mode === "both")) {
       copyMaster.add(row.userId);
     }
   }
@@ -263,6 +264,7 @@ export function listLiveCopyTargets({
     for (const id of mapped) userIds.add(id);
   } else {
     for (const id of desks.mapped) userIds.add(id);
+    for (const id of desks.copyMaster) userIds.add(id);
   }
   const targets = [];
   for (const userId of userIds) {
