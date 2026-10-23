@@ -276,7 +276,10 @@ export function contractLabel(algo) {
     const hedge = algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly";
     return `${algo.symbol || "NIFTY"} ${sell} SELL + ${hedge} BUY premium`;
   }
-  if (isCrudeFirstCandleAlgo(algo)) return `CRUDE OIL ATM CE/PE first ${algo.timeframe || "5m"}`;
+  if (isCrudeFirstCandleAlgo(algo)) {
+    const wing = strikeOffsetLabel(algo.strikeOffset);
+    return `CRUDE OIL ${wing === "ATM" ? "ATM" : wing} CE+/PE− first ${algo.timeframe || "5m"}`;
+  }
   if (isNiftyFirstCandleAlgo(algo)) return `NIFTY ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
@@ -343,7 +346,8 @@ export function summarizeAlgo(algo) {
     const tgt = algo.targetPct || 40;
     const endAt = algo.endTimeIst || "23:15";
     const maxTrades = clampDailyTradeLimit(algo.maxTradesPerDay, 5);
-    return `CRUDE OIL FUT every ${tf} candle · monthly ATM · check each completed ${tf} from ${algo.firstBarStartIst || "09:00"} IST until a signal · one signal places one order · max ${maxTrades} trades/day · CRUDE FUT + CE green and PE red → BUY CE · CRUDE FUT + PE green and CE red → BUY PE · ${CANDLE_ENTRY_RULE} · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
+    const wing = strikeOffsetLabel(algo.strikeOffset);
+    return `CRUDE OIL FUT every ${tf} candle · monthly ${wing} · CE ATM+ / PE ATM− · check each completed ${tf} from ${algo.firstBarStartIst || "09:00"} IST until a signal · one signal places one order · max ${maxTrades} trades/day · CRUDE FUT + CE green and PE red → BUY CE · CRUDE FUT + PE green and CE red → BUY PE · ${CANDLE_ENTRY_RULE} · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
   }
   if (isNiftyFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

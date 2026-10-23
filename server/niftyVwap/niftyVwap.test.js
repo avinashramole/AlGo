@@ -1574,6 +1574,10 @@ test("first candle ATM offset is applied to the strike", () => {
   assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, 5), 22950);
   assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, -5), 22450);
   assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, 9), 22950);
+  assert.equal(OptionStrikeSelector.strikeForWingOffset(6120, 50, 2, "CE"), 6200);
+  assert.equal(OptionStrikeSelector.strikeForWingOffset(6120, 50, 2, "PE"), 6000);
+  assert.equal(OptionStrikeSelector.strikeForWingOffset(6120, 50, -2, "CE"), 6000);
+  assert.equal(OptionStrikeSelector.strikeForWingOffset(6120, 50, -2, "PE"), 6200);
   assert.equal(niftyFirstCandleConfig({ strikeOffset: 5 }).strikeOffset, 5);
   assert.equal(niftyFirstCandleConfig({ strikeOffset: -5 }).strikeOffset, -5);
 });
@@ -1630,6 +1634,58 @@ test("first candle ATM+2 and ATM-2 orders use that strike, not ATM", () => {
   assert.equal(minusBook.places[0].option, "PE");
   assert.equal(minusBook.places[0].symbol, "NIFTY 22600 PE");
   assert.equal(minusBook.places[0].securityId, "pe-22600");
+});
+
+test("crude ATM+2 entry buys CE above ATM and PE below ATM", () => {
+  const plus = defaultCrudeFirstCandleAlgo({ name: "Crude plus two", strikeOffset: 2 });
+  const plusBook = bookAdapter();
+  const plusTick = NiftyVwapStrategy.tick({
+    algo: plus,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(20, 28)],
+    peBars: [firstBar(40, 22)],
+    ceLtp: 28,
+    peLtp: 22,
+    ceSecurityId: "crude-ce-6200",
+    peSecurityId: "crude-pe-6000",
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: plusBook.positions,
+    adapter: plusBook.adapter,
+  });
+  assert.equal(plusTick.action, "entry");
+  assert.equal(plusBook.places[0].strike, 6200);
+  assert.equal(plusBook.places[0].option, "CE");
+  assert.equal(plusBook.places[0].symbol, "CRUDEOIL 6200 CE");
+
+  const pe = defaultCrudeFirstCandleAlgo({ name: "Crude plus two PE", strikeOffset: 2 });
+  const peBook = bookAdapter();
+  const peTick = NiftyVwapStrategy.tick({
+    algo: pe,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(28, 18)],
+    peBars: [firstBar(22, 36)],
+    ceLtp: 18,
+    peLtp: 36,
+    ceSecurityId: "crude-ce-6200",
+    peSecurityId: "crude-pe-6000",
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: peBook.positions,
+    adapter: peBook.adapter,
+  });
+  assert.equal(peTick.action, "entry");
+  assert.equal(peBook.places[0].strike, 6000);
+  assert.equal(peBook.places[0].option, "PE");
+  assert.equal(peBook.places[0].symbol, "CRUDEOIL 6000 PE");
 });
 
 test("a live option tick at the target exits while the chain price is still behind", () => {

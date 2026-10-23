@@ -145,10 +145,17 @@ export function runNiftyVwapBacktest(algo, candles = []) {
       const bar = session[i];
       futAll.push(bar);
       const spot = Number(bar.close);
-      const strike = OptionStrikeSelector.strikeForOffset(spot, 50, cfg.strikeOffset);
+      const ceStrike =
+        String(cfg.symbol || "").toUpperCase() === "CRUDEOIL"
+          ? OptionStrikeSelector.strikeForWingOffset(spot, 50, cfg.strikeOffset, "CE")
+          : OptionStrikeSelector.strikeForOffset(spot, 50, cfg.strikeOffset);
+      const peStrike =
+        String(cfg.symbol || "").toUpperCase() === "CRUDEOIL"
+          ? OptionStrikeSelector.strikeForWingOffset(spot, 50, cfg.strikeOffset, "PE")
+          : OptionStrikeSelector.strikeForOffset(spot, 50, cfg.strikeOffset);
       const expiry = sessionKeyIST(bar.time);
-      const ceBar = optionBarAt(bar, "CE", { symbol: cfg.symbol, strike });
-      const peBar = optionBarAt(bar, "PE", { symbol: cfg.symbol, strike });
+      const ceBar = optionBarAt(bar, "CE", { symbol: cfg.symbol, strike: ceStrike });
+      const peBar = optionBarAt(bar, "PE", { symbol: cfg.symbol, strike: peStrike });
       if (ceBar.source === "stored") storedHits += 1;
       else synthHits += 1;
       if (peBar.source === "stored") storedHits += 1;
@@ -159,8 +166,8 @@ export function runNiftyVwapBacktest(algo, candles = []) {
       const now = Number(bar.time) + cfg.barMinutes * 60 * 1000;
       const ceLtp = ceBars[ceBars.length - 1].close;
       const peLtp = peBars[peBars.length - 1].close;
-      book.mark(`${cfg.symbol} ${strike} CE`, ceLtp);
-      book.mark(`${cfg.symbol} ${strike} PE`, peLtp);
+      book.mark(`${cfg.symbol} ${ceStrike} CE`, ceLtp);
+      book.mark(`${cfg.symbol} ${peStrike} PE`, peLtp);
       if (book.positions[0]) {
         const locked = book.positions[0];
         book.mark(locked.symbol, locked.option === "PE" ? peLtp : ceLtp);

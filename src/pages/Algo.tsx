@@ -394,7 +394,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "crude-first-candle" as const,
       category: `CRUDE OIL EVERY ${(algo.timeframe || "5m").toUpperCase()}`,
-      config: `CRUDE FUT · every ${algo.timeframe || "5m"} · FUT+CE green and PE red → BUY CE · FUT+PE green and CE red → BUY PE · last completed candle · skip doji · skip wick > body · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
+      config: `CRUDE FUT · every ${algo.timeframe || "5m"} · ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset} · CE + / PE −` : "ATM"} · FUT+CE green and PE red → BUY CE · FUT+PE green and CE red → BUY PE · last completed candle · skip doji · skip wick > body · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
     };
   }
   if (isNiftyFirstCandleKind(algo)) {

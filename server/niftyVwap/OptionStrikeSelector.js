@@ -5,12 +5,27 @@ export function atmStrike(spot, step = 50) {
   return Math.round(price / width) * width;
 }
 
+export function clampStrikeOffset(offset) {
+  return Math.max(-5, Math.min(5, Math.round(Number(offset) || 0)));
+}
+
+export function signedOptionOffset(offset, option) {
+  const n = clampStrikeOffset(offset);
+  return String(option || "").toUpperCase() === "PE" ? -n : n;
+}
+
 export function strikeForOffset(spot, step = 50, strikeOffset = 0) {
   const width = Number(step) || 50;
   const atm = atmStrike(spot, width);
   if (!atm) return 0;
-  const offset = Math.max(-5, Math.min(5, Math.round(Number(strikeOffset) || 0)));
-  return atm + offset * width;
+  return atm + clampStrikeOffset(strikeOffset) * width;
+}
+
+export function strikeForWingOffset(spot, step = 50, strikeOffset = 0, option = "CE") {
+  const width = Number(step) || 50;
+  const atm = atmStrike(spot, width);
+  if (!atm) return 0;
+  return atm + signedOptionOffset(strikeOffset, option) * width;
 }
 
 export function optionLabel(symbol, strike, option) {
@@ -19,7 +34,10 @@ export function optionLabel(symbol, strike, option) {
 
 export const OptionStrikeSelector = {
   atmStrike,
+  clampStrikeOffset,
+  signedOptionOffset,
   strikeForOffset,
+  strikeForWingOffset,
   optionLabel,
   select({ spot, step = 50, option, symbol = "NIFTY", locked, strikeOffset = 0 } = {}) {
     if (locked?.strike && locked?.option) {
@@ -30,8 +48,11 @@ export const OptionStrikeSelector = {
         locked: true,
       };
     }
-    const strike = strikeForOffset(spot, step, strikeOffset);
     const opt = option === "PE" ? "PE" : "CE";
+    const strike =
+      String(symbol || "").toUpperCase() === "CRUDEOIL"
+        ? strikeForWingOffset(spot, step, strikeOffset, opt)
+        : strikeForOffset(spot, step, strikeOffset);
     return {
       strike,
       option: opt,

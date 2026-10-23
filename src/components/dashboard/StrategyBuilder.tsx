@@ -20,6 +20,7 @@ import {
   MAX_CONDITION_ROWS,
   contractLabel,
   firstCandleEntryIst,
+  crudeOffsetLabel,
   strikeOffsetLabel,
   lotForSymbol,
   RUN_MODES,
@@ -290,7 +291,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
       const requested = Number(form.maxTradesPerDay);
       const maxTrades = Number.isFinite(requested) && requested >= 1 ? Math.max(1, Math.min(20, Math.round(requested))) : 5;
       const tf = form.timeframe || "5m";
-      return `CRUDE OIL ${tf} · monthly ATM · FUT+CE green and PE red → BUY CE · FUT+PE green and CE red → BUY PE · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · ${lots} lot × 100 = ${lots * 100} qty · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST`;
+      return `CRUDE OIL ${tf} · monthly ${crudeOffsetLabel(form.strikeOffset)} · CE ATM+ / PE ATM− · FUT+CE green and PE red → BUY CE · FUT+PE green and CE red → BUY PE · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · ${lots} lot × 100 = ${lots * 100} qty · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST`;
     }
     if (isNiftyFirstCandleKind(form)) {
       const start = form.dailyLiveIst || "09:00";
@@ -638,7 +639,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <TypeCard
             active={crudeFirst}
             title="CRUDE OIL"
-            text={`Pick 5m, 15m, 30m, 1hr, or custom 1–60 minutes. Checks every completed Crude future candle until a signal. Crude green + ATM CE green → BUY CE. Crude red + ATM PE green → BUY PE. ${CANDLE_ENTRY_RULE} MCX. Paused until Start.`}
+            text={`Pick 5m, 15m, 30m, 1hr, or custom 1–60 minutes. Checks every completed Crude future candle until a signal. Crude green + CE green → BUY CE at ATM + offset. Crude red + PE green → BUY PE at ATM − offset. ${CANDLE_ENTRY_RULE} MCX. Paused until Start.`}
             onClick={() => {
               const next = emptyStrategy("crude-first-candle");
               set({
@@ -1549,7 +1550,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <div className="mt-2.5 space-y-2" data-first-candle-settings={crudeFirst ? "crude" : "nifty"}>
             {crudeFirst ? (
               <p className="desk-help text-[11px] font-semibold text-slate-400">
-                Same custom timeframe on Crude FUT, CE, and PE. FUT + CE green and PE red buys CE. FUT + PE green and CE red buys PE. Set your own stop % and target %.
+                Same custom timeframe on Crude FUT, CE, and PE. FUT + CE green and PE red buys CE. FUT + PE green and CE red buys PE. Strike ATM + N always takes CE above ATM and PE below ATM. Set your own stop % and target %.
               </p>
             ) : null}
             <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
@@ -1585,7 +1586,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                 <select className={fieldClass} value={form.strikeOffset ?? 0} onChange={(event) => set({ strikeOffset: Number(event.target.value) })}>
                   {OPTION_OFFSETS.map((row) => (
                     <option key={row.id} value={row.id}>
-                      {row.label}
+                      {crudeFirst ? crudeOffsetLabel(row.id) : row.label}
                     </option>
                   ))}
                 </select>
@@ -1878,24 +1879,39 @@ function liveOptionHint(
   const symbol = form.symbol || "NIFTY";
   const option = form.optionType === "PE" ? "PE" : "CE";
   const offset = Math.max(-5, Math.min(5, Math.round(Number(form.strikeOffset) || 0)));
+  const crude = isCrudeFirstCandleKind(form);
   const step = strikeStep(symbol);
   const sameDesk = data.optionMeta?.symbol === symbol;
   const rows = sameDesk ? data.optionChain || [] : [];
   const atm = rows.find((row) => row.atm);
   const spot = sameDesk ? Number(data.optionMeta?.spot) : 0;
   const atmPrice = atm ? Number(atm.strike) : spot > 0 ? Math.round(spot / step) * step : 0;
-  const want = atmPrice > 0 ? atmPrice + offset * step : 0;
+  const wantCe = atmPrice > 0 ? atmPrice + offset * step : 0;
+  const wantPe = atmPrice > 0 ? atmPrice + (crude ? -offset : offset) * step : 0;
+  const want = option === "PE" ? wantPe : wantCe;
+  const label = crude ? crudeOffsetLabel(offset) : strikeOffsetLabel(offset);
   if (!sameDesk) {
-    return `Open Options on ${symbol} to see live ${strikeOffsetLabel(offset)} ${option} LTP`;
+    return crude
+      ? `Open Options on ${symbol} to see live ${label}`
+      : `Open Options on ${symbol} to see live ${label} ${option} LTP`;
   }
   if (!(atmPrice > 0)) return "Waiting for ATM on the option tape";
+  if (crude) {
+    const ceRow = rows.find((item) => Number(item.strike) === wantCe);
+    const peRow = rows.find((item) => Number(item.strike) === wantPe);
+    if (!ceRow && !peRow) return `${symbol} · no ${label} wings on this tape`;
+    const ceLtp = Number(ceRow?.callLtp);
+    const peLtp = Number(peRow?.putLtp);
+    const expiry = data.optionMeta?.expiryLabel || data.optionMeta?.expiry || "";
+    return `CE ${wantCe} ${ceLtp > 0 ? ceLtp : "—"} · PE ${wantPe} ${peLtp > 0 ? peLtp : "—"} · ${label}${expiry ? ` · ${expiry}` : ""}`;
+  }
   const row = rows.find((item) => Number(item.strike) === want);
-  if (!row) return `${symbol} ${want} ${option} · no ${strikeOffsetLabel(offset)} strike on this tape`;
+  if (!row) return `${symbol} ${want} ${option} · no ${label} strike on this tape`;
   const ltp = option === "PE" ? Number(row.putLtp) : Number(row.callLtp);
   const expiry = data.optionMeta?.expiryLabel || data.optionMeta?.expiry || "";
   return ltp > 0
-    ? `${symbol} ${row.strike} ${option} · ${strikeOffsetLabel(offset)} · LTP ${ltp}${expiry ? ` · ${expiry}` : ""}`
-    : `${symbol} ${row.strike} ${option} · ${strikeOffsetLabel(offset)} · waiting for LTP`;
+    ? `${symbol} ${row.strike} ${option} · ${label} · LTP ${ltp}${expiry ? ` · ${expiry}` : ""}`
+    : `${symbol} ${row.strike} ${option} · ${label} · waiting for LTP`;
 }
 
 function TypeCard({ active, title, text, onClick }: { active: boolean; title: string; text: string; onClick: () => void }) {

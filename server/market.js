@@ -2245,8 +2245,12 @@ function firstCandleAtmSpot(root, futPx) {
   return 0;
 }
 
-function firstCandleSelectedStrike(root, futPx, step, offset) {
-  const fromSpot = OptionStrikeSelector.strikeForOffset(firstCandleAtmSpot(root, futPx), step, offset);
+function firstCandleSelectedStrike(root, futPx, step, offset, option = "") {
+  const spot = firstCandleAtmSpot(root, futPx);
+  const fromSpot =
+    String(root || "").toUpperCase() === "CRUDEOIL" && (option === "CE" || option === "PE")
+      ? OptionStrikeSelector.strikeForWingOffset(spot, step, offset, option)
+      : OptionStrikeSelector.strikeForOffset(spot, step, offset);
   if (saneUnderlyingPx(root, fromSpot)) return fromSpot;
   const marked = chainMarkedAtmStrike(root);
   return saneUnderlyingPx(root, marked) ? marked : 0;
@@ -2264,16 +2268,17 @@ function firstCandlePreviewLegs(algo, preview) {
   const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
   const und = getUnderlying(root);
   const futSpot = Number(preview?.close) || 0;
-  const selected = firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset);
+  const ceSelected = firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset, "CE");
+  const peSelected = firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset, "PE");
   const ceStrike =
     usableFirstCandleStrike(root, vs.lockedOption === "CE" ? vs.lockedStrike : 0) ||
     usableFirstCandleStrike(root, vs.ceStrike) ||
-    selected ||
+    ceSelected ||
     0;
   const peStrike =
     usableFirstCandleStrike(root, vs.lockedOption === "PE" ? vs.lockedStrike : 0) ||
     usableFirstCandleStrike(root, vs.peStrike) ||
-    selected ||
+    peSelected ||
     0;
   return {
     ce: preview ? sameTime(vs.ceBars, preview.time) : null,
@@ -2948,13 +2953,16 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   }
   const futSpot = Number(lastBar?.close) || Number(livePreview?.close) || Number(livePreview?.open) || 0;
   const spot = isFirstCandleAlgo(algo) ? firstCandleAtmSpot(root, futSpot) : Number(getChainSpot(root)) || futSpot;
-  const selected = isFirstCandleAlgo(algo)
-    ? firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset)
+  const selectedCe = isFirstCandleAlgo(algo)
+    ? firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset, "CE")
+    : OptionStrikeSelector.strikeForOffset(spot, und.step, config.strikeOffset);
+  const selectedPe = isFirstCandleAlgo(algo)
+    ? firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset, "PE")
     : OptionStrikeSelector.strikeForOffset(spot, und.step, config.strikeOffset);
   const ceStrike =
-    usableFirstCandleStrike(root, vs.lockedOption === "CE" ? vs.lockedStrike : 0) || selected;
+    usableFirstCandleStrike(root, vs.lockedOption === "CE" ? vs.lockedStrike : 0) || selectedCe;
   const peStrike =
-    usableFirstCandleStrike(root, vs.lockedOption === "PE" ? vs.lockedStrike : 0) || selected;
+    usableFirstCandleStrike(root, vs.lockedOption === "PE" ? vs.lockedStrike : 0) || selectedPe;
   if (vs.ceStrike !== ceStrike) {
     vs.ceBars = [];
     vs.ceStrike = ceStrike;
@@ -3031,7 +3039,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     futuresBars,
     ceBars: vs.ceBars,
     peBars: vs.peBars,
-    spot: isFirstCandleAlgo(algo) && selected ? selected : spot,
+    spot,
     step: und.step,
     expiry,
     ceLtp,
@@ -3273,22 +3281,32 @@ function resolveCrudeFirstCandleTrade(algo) {
   const pack = chainForSymbol(symbol);
   const vs = algo.vwapState || {};
   const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);
-  const selected = OptionStrikeSelector.strikeForOffset(spot, und.step, algo.strikeOffset);
-  const strike = Number(vs.lockedStrike) || selected;
+  const ceStrike = OptionStrikeSelector.strikeForWingOffset(spot, und.step, algo.strikeOffset, "CE");
+  const peStrike = OptionStrikeSelector.strikeForWingOffset(spot, und.step, algo.strikeOffset, "PE");
   const option = vs.lockedOption === "PE" ? "PE" : vs.lockedOption === "CE" ? "CE" : "";
+  const strike = Number(vs.lockedStrike) || (option === "PE" ? peStrike : ceStrike);
   const expiry = pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
-  const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
-  const ceLtp = Number(row?.callLtp);
-  const peLtp = Number(row?.putLtp);
+  const rows = pack?.rows || [];
+  const row = rows.find((item) => Number(item.strike) === Number(strike));
+  const ceRow = rows.find((item) => Number(item.strike) === Number(ceStrike));
+  const peRow = rows.find((item) => Number(item.strike) === Number(peStrike));
+  const ceLtp = Number((option === "PE" ? ceRow : row || ceRow)?.callLtp);
+  const peLtp = Number((option === "CE" ? peRow : row || peRow)?.putLtp);
   const liveChain = pack?.meta?.source === "dhan";
   const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
   const securityId = option === "PE" ? row?.putId || row?.putSecurityId : row?.callId || row?.callSecurityId;
-  const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike || "ATM"} ${strikeOffsetLabel(algo.strikeOffset)}`;
+  const offset = OptionStrikeSelector.clampStrikeOffset(algo.strikeOffset);
+  const offsetLabel = strikeOffsetLabel(offset);
+  const contract = option
+    ? `${symbol} ${strike} ${option}`
+    : offset
+      ? `${symbol} CE ${ceStrike || "ATM"} / PE ${peStrike || "ATM"} ${offsetLabel}`
+      : `${symbol} ${strike || "ATM"} ${offsetLabel}`;
   let hint = "";
   if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
-  else if (!row) hint = `No ${strike} ATM on the ${symbol} tape yet`;
+  else if (!ceRow && !peRow) hint = `No ${offsetLabel} wings on the ${symbol} tape yet`;
   else if (!(ceLtp > 0) && !(peLtp > 0)) hint = "Waiting for live ATM option LTP";
-  else hint = `CE ${ceLtp > 0 ? ceLtp : "—"} · PE ${peLtp > 0 ? peLtp : "—"}`;
+  else hint = `CE ${ceStrike || "—"} ${ceLtp > 0 ? ceLtp : "—"} · PE ${peStrike || "—"} ${peLtp > 0 ? peLtp : "—"}`;
   return {
     kind: "option",
     symbol: contract,

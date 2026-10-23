@@ -488,6 +488,13 @@ export function strikeOffsetLabel(offset?: number) {
   return OPTION_OFFSETS.find((row) => row.id === n)?.label || "ATM";
 }
 
+export function crudeOffsetLabel(offset?: number) {
+  const n = Math.max(-5, Math.min(5, Math.round(Number(offset) || 0)));
+  if (n === 0) return "ATM";
+  const mag = Math.abs(n);
+  return n > 0 ? `ATM + ${mag} · CE +${mag} / PE −${mag}` : `ATM − ${mag} · CE −${mag} / PE +${mag}`;
+}
+
 export function isNiftyVwapKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
   return algo?.kind === "nifty-vwap" || algo?.strategyType === "NIFTY_VWAP_ATM" || algo?.indicator === "NIFTY_VWAP_ATM";
 }

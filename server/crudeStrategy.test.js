@@ -91,6 +91,48 @@ test("option-chain BUY goes to Dhan when LIVE even if Paper is selected", () => 
   );
 });
 
+test("crude ATM+2 buys CE above ATM and PE below ATM", () => {
+  cacheOptionDesk({
+    symbol: "CRUDEOIL",
+    expiry: "2026-10-19",
+    expiries: ["2026-10-19"],
+    spot: 6120,
+    source: "dhan",
+    rows: [
+      { strike: 6000, atm: false, callLtp: 80, putLtp: 22, callId: "crude-ce-6000", putId: "crude-pe-6000" },
+      { strike: 6100, atm: true, callLtp: 40, putLtp: 50, callId: "crude-ce-6100", putId: "crude-pe-6100" },
+      { strike: 6200, atm: false, callLtp: 18, putLtp: 88, callId: "crude-ce-6200", putId: "crude-pe-6200" },
+    ],
+  });
+  const plus = normalizeAlgo({ name: "CRUDE OIL 5m first candle", kind: "crude-first-candle", strikeOffset: 2 });
+  const plusTrade = resolveAlgoTrade(plus);
+  assert.equal(plus.strikeOffset, 2);
+  assert.equal(plusTrade.strike, 6200);
+  assert.equal(plusTrade.securityId, "crude-ce-6200");
+  assert.match(String(plusTrade.symbol), /6200/);
+  assert.match(String(plusTrade.hint), /CE 6200/);
+  assert.match(String(plusTrade.hint), /PE 6000/);
+  assert.doesNotMatch(String(plusTrade.hint), /CE 6100/);
+
+  const lockedPe = normalizeAlgo({
+    name: "CRUDE OIL 5m first candle",
+    kind: "crude-first-candle",
+    strikeOffset: 2,
+  });
+  lockedPe.vwapState = { lockedOption: "PE", lockedStrike: 6000 };
+  const peTrade = resolveAlgoTrade(lockedPe);
+  assert.equal(peTrade.option, "PE");
+  assert.equal(peTrade.strike, 6000);
+  assert.equal(peTrade.securityId, "crude-pe-6000");
+  assert.match(String(peTrade.symbol), /CRUDEOIL 6000 PE/);
+
+  const minus = normalizeAlgo({ name: "CRUDE OIL 5m first candle", kind: "crude-first-candle", strikeOffset: -2 });
+  const minusTrade = resolveAlgoTrade(minus);
+  assert.equal(minusTrade.strike, 6000);
+  assert.match(String(minusTrade.hint), /CE 6000/);
+  assert.match(String(minusTrade.hint), /PE 6200/);
+});
+
 test("nifty first candle ATM+2 and ATM-2 resolve to 22800 and 22600, not the ATM strike", () => {
   const expiry = nearestWeeklyExpiry(upcomingExpiries("NIFTY", 12), "NIFTY");
   setOptionDesk({
