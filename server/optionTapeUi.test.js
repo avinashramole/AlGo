@@ -54,4 +54,14 @@ test("Market tape shows Option Chain lots and hides the extra chip row", () => {
   assert.match(markets, /\{ id: "COPPER", label: "COPPER", lot: 2500 \}/);
   assert.equal(options.includes("{item.label} · {item.lot}"), false);
   assert.match(options, /TickerStrip selectedId/);
+  assert.match(options, /data-option-chain-map="true"/);
+  assert.match(options, /Map clients/);
+  assert.match(options, /saveOptionChainMap/);
+  assert.match(options, /Map clients to option chain/);
+  assert.match(options, /Master \+ selected clients/);
+  const client = fs.readFileSync(path.join(root, "src/api/client.ts"), "utf8");
+  assert.match(client, /export function saveOptionChainMap/);
+  assert.match(client, /optionChainMap\?:/);
+  const index = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
+  assert.match(index, /app.post\("\/api\/option-chain-map"/);
 });

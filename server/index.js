@@ -46,6 +46,7 @@ import { deskHealthPayload } from "./deskHealth.js";
 import { startKotakAdminQuoteFeed } from "./kotakAdminFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
 import { lookupOptionSecurityId, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
+import { getOptionChainMap, saveOptionChainMap } from "./optionChainMap.js";
 import { sendAndroidApk } from "./apkDownload.js";
 import { isNiftyTest2Algo, niftyTest2Config } from "./niftyVwap/config.js";
 import {
@@ -957,6 +958,19 @@ app.post("/api/option-chain/select", async (req, res) => {
     res.json({ ok: true, meta: getOptionMeta(), snapshot: snapshot() });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Option chain failed", snapshot: snapshot() });
+  }
+});
+
+app.get("/api/option-chain-map", (_req, res) => {
+  res.json({ ok: true, map: getOptionChainMap() });
+});
+
+app.post("/api/option-chain-map", (req, res) => {
+  try {
+    const map = saveOptionChainMap(req.body || {});
+    res.json({ ok: true, map, snapshot: snapshot() });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save option chain mapping" });
   }
 });
 

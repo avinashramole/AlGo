@@ -5,6 +5,7 @@ import { clearPreviousIntradayStrategyBook, clearStrategyOrdersOnMemberDesks, dr
 import { ADMIN_ARCHIVE_ID, archiveTrades } from "./tradeArchive.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, findLiveCopyAlgo, listLiveCopyTargets, memberCopyPayloads } from "./liveCopy.js";
+import { dropOptionChainMappedClient, getOptionChainMap, isManualChainOrder, optionChainCopyAlgo } from "./optionChainMap.js";
 import { applyBrokerBookToReport, overlayLiveUnrealized, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 import {
   UNDERLYINGS,
@@ -1591,7 +1592,7 @@ export function fanOutAdminOrderCopies(payload = {}, order = {}) {
     symbol: order.symbol || payload.symbol,
     price: order.price || payload.price,
   };
-  const algo = liveCopyAlgo(next);
+  const algo = isManualChainOrder(payload) ? optionChainCopyAlgo() : liveCopyAlgo(next);
   const copies = memberCopiesForOrder(next, algo);
   if (!copies.length) {
     const mapped = Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds.length : 0;
@@ -4098,6 +4099,7 @@ export function snapshot() {
     },
     indices: publicIndices(publicState.indices.map(withDeskQuotes)),
     optionChain: publicOptionRows(publicState.optionChain),
+    optionChainMap: getOptionChainMap(),
     settings: { ...state.settings, broker: active.name },
     marketStatus: nseMarketSession().status,
     marketSession: nseMarketSession(),
@@ -4370,7 +4372,7 @@ export function dropClientFromStrategies(userId) {
     }
   }
   if (changed) persistAlgos();
-  return changed;
+  return dropOptionChainMappedClient(id) || changed;
 }
 
 export function dropClientFromStrategy(userId, { strategyId, strategyName } = {}) {

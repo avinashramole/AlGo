@@ -207,6 +207,10 @@ export type Snapshot = {
     contractIds?: number;
     underlyings?: Array<{ id: string; label: string; lot: number }>;
   };
+  optionChainMap?: {
+    mappingScope?: "master" | "clients" | "both";
+    mappedClientIds?: string[];
+  };
   algos: Array<{
     id: string;
     name: string;
@@ -1908,4 +1912,11 @@ export function selectOptionChain(symbol: string, expiry?: string) {
     method: "POST",
     body: JSON.stringify({ symbol, expiry }),
   });
+}
+
+export function saveOptionChainMap(payload: { mappedClientIds?: string[]; mappingScope?: "master" | "clients" | "both" }) {
+  return request<{ ok: boolean; map: { mappingScope: "master" | "clients" | "both"; mappedClientIds: string[] }; snapshot?: Snapshot }>(
+    "/option-chain-map",
+    { method: "POST", body: JSON.stringify(payload) },
+  );
 }
