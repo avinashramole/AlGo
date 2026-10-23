@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "path";
 import test from "node:test";
+import { seedOptionScripForTests } from "./frontFutures.js";
 import { nearestWeeklyExpiry, upcomingExpiries } from "./optionChain.js";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-broker-test-order-"));
@@ -144,6 +145,70 @@ test("Test 1 order queues 1 ATM lot to Dhan and copies mapped clients", () => {
     deleteAlgo(created.id);
     drainPendingLiveAlgoOrders();
     setDhanFeed({ live: false });
+  }
+});
+
+test("Shivam Test 1 order keeps the same weekly expiry for admin and user when the desk is monthly", () => {
+  setDhanFeed({ live: true });
+  drainPendingLiveAlgoOrders();
+  const monthly = "2026-10-27";
+  const weekly = nearestWeeklyExpiry(["2026-10-27", "2026-11-03", "2026-11-10"], "NIFTY");
+  seedOptionScripForTests([
+    { root: "NIFTY", expiry: weekly, strike: 25000, option: "CE", securityId: "weekly-ce-25000" },
+    { root: "NIFTY", expiry: weekly, strike: 25000, option: "PE", securityId: "weekly-pe-25000" },
+  ]);
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry: monthly,
+    expiries: [monthly, weekly, "2026-11-10"],
+    spot: 25000,
+    source: "dhan",
+    rows: [
+      {
+        strike: 25000,
+        atm: true,
+        callLtp: 120,
+        putLtp: 110,
+        callId: "monthly-ce-25000",
+        putId: "monthly-pe-25000",
+        lotSize: 65,
+      },
+    ],
+  });
+  const user = liveMappedUser("u-same-expiry");
+  const created = createAlgo({
+    kind: "shivam-t2s",
+    testDesk: true,
+    runMode: "live",
+    liveAuthorized: true,
+    brokerId: "dhan",
+    mappingScope: "clients",
+    mappedClientIds: [user.id],
+  });
+  try {
+    assert.equal(weekly, "2026-11-03");
+    toggleAlgo(created.id, { enabled: true });
+    const sent = placeStrategyBrokerTestOrder(created.id, { confirm: true });
+    assert.equal(sent.ok, true);
+    assert.equal(sent.contract?.expiry, weekly);
+    assert.equal(sent.contract?.securityId, "weekly-ce-25000");
+    assert.notEqual(sent.result?.skippedAdmin, true);
+    const queued = drainPendingLiveAlgoOrders();
+    const admin = queued.find((row) => !row.copyUserId);
+    const copy = queued.find((row) => row.copyUserId === user.id);
+    assert.ok(admin, "admin Dhan order missing");
+    assert.ok(copy, "mapped user copy missing");
+    assert.equal(admin.expiry, weekly);
+    assert.equal(copy.expiry, weekly);
+    assert.equal(admin.securityId, "weekly-ce-25000");
+    assert.equal(copy.securityId, "weekly-ce-25000");
+    assert.equal(admin.brokerId, "dhan");
+    assert.equal(copy.brokerId, "dhan");
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+    pinAtmChain();
   }
 });
 
@@ -314,7 +379,7 @@ test("Shivam mapped clients receive the user-broker copy when admin entry queues
   }
 });
 
-test("clients-only mapping skips the admin broker and sends the user copy", () => {
+test("clients-only mapping still sends admin Dhan and the user copy for Shivam", () => {
   setDhanFeed({ live: true });
   pinAtmChain();
   drainPendingLiveAlgoOrders();
@@ -332,12 +397,15 @@ test("clients-only mapping skips the admin broker and sends the user copy", () =
     toggleAlgo(created.id, { enabled: true });
     const sent = tickStyleShivamEntry(created);
     assert.equal(sent.queued, true);
-    assert.equal(sent.skippedAdmin, true);
-    assert.equal(sent.status, "COPIED");
+    assert.notEqual(sent.skippedAdmin, true);
     const queued = drainPendingLiveAlgoOrders();
-    assert.equal(queued.some((row) => !row.copyUserId), false);
+    const admin = queued.find((row) => !row.copyUserId);
     const copy = queued.find((row) => row.copyUserId === user.id);
+    assert.ok(admin, "admin Dhan order missing");
     assert.ok(copy, "mapped user copy missing");
+    assert.equal(admin.brokerId, "dhan");
+    assert.equal(admin.expiry, copy.expiry);
+    assert.equal(admin.securityId, copy.securityId);
     assert.equal(copy.brokerId, "dhan");
     assert.equal(copy.account?.accessToken, "member-dhan-token");
     assert.notEqual(copy.paper, true);
@@ -410,8 +478,7 @@ test("clients-only still copies when admin already has a leftover lot on this st
       },
     ]);
     const sent = tickStyleShivamEntry(created);
-    assert.equal(sent.queued, true);
-    assert.equal(sent.skippedAdmin, true);
+    assert.notEqual(sent.skippedAdmin, true);
     const queued = drainPendingLiveAlgoOrders();
     assert.equal(queued.some((row) => !row.copyUserId), false);
     assert.equal(queued.some((row) => row.copyUserId === user.id), true);

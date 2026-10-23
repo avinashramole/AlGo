@@ -859,6 +859,7 @@ function skipAdminBrokerOrder(algo = {}, payload = {}) {
   if (payload?.copyUserId) return false;
   if (isBrokerTestOrder(payload)) return false;
   if (payload?.forceLiveBroker === true) return false;
+  if (isShivamT2sAlgo(algo) || isShivamT2sName(payload?.strategy)) return false;
   if (!clientsOnlyAlgo(algo)) return false;
   if (liveOrderSide(payload) === "SELL" && adminHasOpenOptionLot(algo, payload)) return false;
   const targets = listLiveCopyTargets({
@@ -1870,7 +1871,7 @@ export function queueLiveAlgoOrder(payload) {
     });
   if (!payload.skipMemberCopy && (!testDesk || shivamLive || shivamCopy)) {
     const copyBuy = liveOrderSide(deskStamped) === "BUY";
-    if (!copyBuy || adminResult?.queued || skipAdmin) {
+    if (!copyBuy || adminResult?.queued || skipAdmin || shivamCopy) {
       for (const copy of memberCopiesForOrder(deskStamped, copyAlgo || {})) {
         enqueueLiveAlgoOrder(brokerTestMemberCopy(copy, deskStamped));
       }
@@ -2566,6 +2567,16 @@ function instrumentLotSize(root, strike, fallback = 0) {
   return Math.max(0, Math.round(Number(fallback) || 0));
 }
 
+function shivamContractExpiry(config = {}, pack = {}, root = "") {
+  const symbol = root || config.symbol || "NIFTY";
+  const listed = niftyListedExpiries(pack, symbol);
+  const mcx = config.session === "mcx" || isMcxSymbol(symbol);
+  if (mcx || config.expiryKind !== "weekly") {
+    return pack?.meta?.expiry || listed[0] || upcomingExpiries(symbol)[0] || "";
+  }
+  return nearestWeeklyExpiry(listed, symbol) || pack?.meta?.expiry || listed[0] || "";
+}
+
 function tickShivamT2sAlgo(algo, mode, feedLive) {
   const now = Date.now();
   if (mode === "live") releaseStaleLiveSend(algo, now);
@@ -2595,11 +2606,7 @@ function tickShivamT2sAlgo(algo, mode, feedLive) {
   }
   const und = getUnderlying(root);
   const pack = chainForSymbol(root);
-  const listed = niftyListedExpiries(pack, root);
-  const expiry =
-    mcx || config.expiryKind !== "weekly"
-      ? pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || ""
-      : nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || "";
+  const expiry = shivamContractExpiry(config, pack, root);
   const lastIndex = (getCandles(config.indexTimeframe, root) || []).at(-1);
   const futLtp = liveLtpForSymbol(config.futuresInstrument) || 0;
   const spot = futLtp || Number(getChainSpot(root)) || Number(lastIndex?.close) || 0;
@@ -4592,12 +4599,7 @@ function resolveBrokerTestTrade(algo) {
     const vs = shivamState(algo);
     const und = getUnderlying(root);
     const pack = chainForSymbol(root);
-    const listed = niftyListedExpiries(pack, root);
-    const mcx = config.session === "mcx" || isMcxSymbol(root);
-    const expiry =
-      !mcx && config.expiryKind === "weekly"
-        ? nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || ""
-        : pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || "";
+    const expiry = shivamContractExpiry(config, pack, root);
     const lastIndex = (getCandles(config.indexTimeframe, root) || []).at(-1);
     const futLtp = liveLtpForSymbol(config.futuresInstrument) || 0;
     const spot = futLtp || Number(getChainSpot(root)) || Number(pack?.meta?.spot) || Number(lastIndex?.close) || 0;

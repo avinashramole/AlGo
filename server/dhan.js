@@ -2102,6 +2102,8 @@ export function securityIdForCopyOrder({
   const chainOk = !wanted || !chain || wanted === chain;
   if (chainOk && stamped && stamped !== "0") return stamped;
   if (chainOk && fromChain && fromChain !== "0") return fromChain;
+  // Desk is on another expiry: keep the strategy contract, never the open-chain row.
+  if (stamped && stamped !== "0" && stamped !== fromChain) return stamped;
   return "";
 }
 

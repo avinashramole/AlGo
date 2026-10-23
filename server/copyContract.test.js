@@ -36,6 +36,16 @@ test("admin and user copy the strategy expiry, not the other chain on the desk",
     scripSecurityId: "",
   });
   assert.equal(niftyDesk, "");
+  const stampedWeekly = securityIdForCopyOrder({
+    payloadSecurityId: "weekly-22650-ce",
+    payloadExpiry: "2026-11-03",
+    payloadSymbol: "NIFTY 22650 CE",
+    chainExpiry: "2026-10-27",
+    chainSymbol: "NIFTY",
+    chainSecurityId: "monthly-22650-ce",
+    scripSecurityId: "",
+  });
+  assert.equal(stampedWeekly, "weekly-22650-ce");
   const crude = securityIdForCopyOrder({
     payloadSecurityId: "crude-ce-6100",
     payloadExpiry: "2026-10-19",
